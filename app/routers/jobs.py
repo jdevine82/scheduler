@@ -1,5 +1,6 @@
 import datetime
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 BOOKED_STATUS_NAME = "Booked with Customer"
+MANUAL_TASK_QUEUE_NAME = "Manual task"
 
 
 def _touch(job: Job, user: User) -> None:
@@ -59,6 +61,36 @@ def purge_past_jobs(
     return RedirectResponse(f"{return_to}{separator}purged={count}", status_code=303)
 
 
+@router.post("/jobs/manual")
+async def create_manual_job(
+    request: Request,
+    title: str = Form(...),
+    description: str = Form(""),
+    return_to: str = Form("/week"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Add a task with no ServiceM8 job behind it. Behaves like any other job
+    once created — schedulable, editable, deletable — except it can never be
+    booked or touched by ServiceM8 sync (its servicem8_uuid is just a local
+    placeholder, never matched by anything ServiceM8 returns)."""
+    default_status = db.query(Status).order_by(Status.sort_order).first()
+    job = Job(
+        servicem8_uuid=f"manual-{uuid.uuid4()}",
+        job_number=f"M-{db.query(Job).filter(Job.is_manual.is_(True)).count() + 1}",
+        customer_name=title,
+        description=description,
+        queue_name=MANUAL_TASK_QUEUE_NAME,
+        status_id=default_status.id,
+        is_manual=True,
+    )
+    db.add(job)
+    db.flush()
+    _touch(job, user)
+    db.commit()
+    return RedirectResponse(return_to, status_code=303)
+
+
 @router.post("/jobs/{job_id}")
 async def update_job(
     job_id: int,
@@ -71,6 +103,14 @@ async def update_job(
     job = db.get(Job, job_id)
     if job is None:
         return RedirectResponse(return_to, status_code=303)
+
+    # Only a manual task's modal actually submits these fields — a
+    # ServiceM8-sourced job's title/description stay read-only in the UI.
+    if job.is_manual:
+        if "customer_name" in form:
+            job.customer_name = form.get("customer_name") or job.customer_name
+        if "description" in form:
+            job.description = form.get("description", "")
 
     status_id = form.get("status_id")
     if status_id:
@@ -125,6 +165,9 @@ def book_in_servicem8(
     job = db.get(Job, job_id)
     if job is None:
         return RedirectResponse(return_to, status_code=303)
+
+    if job.is_manual:
+        return RedirectResponse(f"{return_to}{separator}booked=manual", status_code=303)
 
     if job.day is None or job.start_time is None or job.end_time is None:
         return RedirectResponse(f"{return_to}{separator}booked=notscheduled", status_code=303)

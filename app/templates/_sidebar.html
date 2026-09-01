@@ -1,5 +1,8 @@
 <div class="sidebar">
-  <h3>Unscheduled — from ServiceM8</h3>
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+    <h3 style="margin:0;">Unscheduled — from ServiceM8</h3>
+    <button type="button" class="link-btn" id="add-task-open" style="font-weight:600; font-size:12px;" title="Add a manual task with no ServiceM8 job">+ Add task</button>
+  </div>
   <select class="queue-filter" id="sidebar-queue-filter" style="cursor:pointer;">
     <option value="">All queues</option>
     {% for q in queues %}
@@ -20,4 +23,36 @@
     <div class="empty">No unscheduled jobs.</div>
   {% endif %}
   <div class="empty" id="sidebar-search-empty" style="display:none;">No jobs match your filters.</div>
+</div>
+
+<div class="overlay" id="add-task-overlay" style="display:none;">
+  <div class="modal" style="width:380px;">
+    <form method="post" action="/jobs/manual">
+      <input type="hidden" name="return_to" id="add-task-return-to" value="">
+      <div class="modal-head">
+        <div class="jobnum">Add task</div>
+        <button type="button" class="modal-close" id="add-task-close">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field-group">
+          <div class="field-label">Title</div>
+          <input class="select-input" type="text" name="title" placeholder="e.g. Pick up parts from supplier" required autofocus>
+        </div>
+        <div class="field-group">
+          <div class="field-label">Description (optional)</div>
+          <textarea class="readonly-box" name="description" rows="3" style="width:100%; font-family:inherit; resize:vertical;"></textarea>
+        </div>
+        <div style="font-size:11px; color:var(--text-muted);">
+          Added as unscheduled, just like a ServiceM8 job — drag it onto the calendar when ready. It can't be booked in ServiceM8 since there's no ServiceM8 job behind it.
+        </div>
+      </div>
+      <div class="modal-foot">
+        <div></div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-outline" type="button" id="add-task-cancel">Cancel</button>
+          <button class="btn btn-primary" type="submit">Add task</button>
+        </div>
+      </div>
+    </form>
+  </div>
 </div>

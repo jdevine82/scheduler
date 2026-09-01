@@ -81,6 +81,11 @@ class Job(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     queue_name: Mapped[str] = mapped_column(String(128), default="")
 
+    # A manually-added task with no ServiceM8 job behind it — schedules,
+    # edits, and deletes like any other job, but can never be booked or
+    # touched by ServiceM8 sync (servicem8_uuid is a local placeholder).
+    is_manual: Mapped[bool] = mapped_column(Boolean, default=False)
+
     status_id: Mapped[int] = mapped_column(ForeignKey("statuses.id"))
     status: Mapped["Status"] = relationship(back_populates="jobs")
 

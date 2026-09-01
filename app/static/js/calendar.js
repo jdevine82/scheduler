@@ -78,6 +78,29 @@
     });
   }
 
+  // Add-task dialog — a manual task with no ServiceM8 job behind it.
+  const addTaskOpen = document.getElementById("add-task-open");
+  const addTaskOverlay = document.getElementById("add-task-overlay");
+  if (addTaskOpen && addTaskOverlay) {
+    const addTaskClose = document.getElementById("add-task-close");
+    const addTaskCancel = document.getElementById("add-task-cancel");
+    const addTaskReturnTo = document.getElementById("add-task-return-to");
+
+    const hideAddTask = () => {
+      addTaskOverlay.style.display = "none";
+    };
+
+    addTaskOpen.addEventListener("click", () => {
+      addTaskReturnTo.value = window.location.pathname + window.location.search;
+      addTaskOverlay.style.display = "flex";
+    });
+    addTaskClose.addEventListener("click", hideAddTask);
+    addTaskCancel.addEventListener("click", hideAddTask);
+    addTaskOverlay.addEventListener("click", (e) => {
+      if (e.target === addTaskOverlay) hideAddTask();
+    });
+  }
+
   function addDragHighlight(el) {
     el.addEventListener("dragenter", () => el.classList.add("drag-over"));
     el.addEventListener("dragleave", () => el.classList.remove("drag-over"));

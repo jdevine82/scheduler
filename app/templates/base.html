@@ -54,6 +54,8 @@
 <div class="flash success" style="margin:14px 20px 0 20px;">Cleared {{ purged_count }} past-week job{{ "s" if purged_count != "1" else "" }} from the local schedule. Anything still sitting in a watched ServiceM8 queue will come back as unscheduled on the next sync.</div>
 {% elif request.query_params.get("booked") == "ok" %}
 <div class="flash success" style="margin:14px 20px 0 20px;">Booked in ServiceM8 and status set to Booked with Customer.</div>
+{% elif request.query_params.get("booked") == "manual" %}
+<div class="flash error" style="margin:14px 20px 0 20px;">Manual tasks have no ServiceM8 job — they can't be booked there.</div>
 {% elif request.query_params.get("booked") == "notscheduled" %}
 <div class="flash error" style="margin:14px 20px 0 20px;">That job needs a day, start time, and finish time before it can be booked in ServiceM8.</div>
 {% elif request.query_params.get("booked") == "nokey" %}

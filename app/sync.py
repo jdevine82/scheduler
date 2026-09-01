@@ -139,7 +139,9 @@ def resync_all_bookings(db: Session, api_key: str) -> dict:
     top-bar Sync Now button so a booking removed or moved in ServiceM8 gets
     caught without having to open each job individually."""
     booked_jobs = (
-        db.query(Job).filter(Job.servicem8_booked.is_(True), Job.servicem8_activity_uuid.isnot(None)).all()
+        db.query(Job)
+        .filter(Job.servicem8_booked.is_(True), Job.servicem8_activity_uuid.isnot(None), Job.is_manual.is_(False))
+        .all()
     )
     updated = 0
     cancelled = 0

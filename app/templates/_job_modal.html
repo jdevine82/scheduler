@@ -12,10 +12,21 @@
         {% if j.flagged_missing_from_queue %}
         <div class="flash error">No longer in a watched ServiceM8 queue — it may have been moved or closed there. Local scheduling is untouched.</div>
         {% endif %}
+        {% if j.is_manual %}
+        <div class="field-group">
+          <div class="field-label">Title</div>
+          <input class="select-input" type="text" name="customer_name" value="{{ j.customer_name }}" required>
+        </div>
+        <div class="field-group">
+          <div class="field-label">Description</div>
+          <textarea class="readonly-box desc" name="description" rows="3" style="width:100%; font-family:inherit; resize:vertical;">{{ j.description }}</textarea>
+        </div>
+        {% else %}
         <div class="field-group">
           <div class="field-label">Description — from ServiceM8</div>
           <div class="readonly-box desc">{{ j.description }}</div>
         </div>
+        {% endif %}
 
         <div class="field-group">
           <div class="field-label">Status</div>
@@ -82,7 +93,11 @@
         {% set is_scheduled = j.day and j.start_time and j.end_time %}
         <div class="field-group">
           <div class="field-label">ServiceM8 booking</div>
-          {% if j.servicem8_booked %}
+          {% if j.is_manual %}
+          <div class="sm8-status not-booked">
+            <div class="left" style="color:var(--text-muted);">Manual task — not linked to ServiceM8, so it can't be booked there.</div>
+          </div>
+          {% elif j.servicem8_booked %}
           <div class="sm8-status">
             <div class="left"><div class="check">&#10003;</div>Booked in ServiceM8 {% if j.servicem8_last_synced_at %}&middot; synced {{ j.servicem8_last_synced_at|relative_time }}{% endif %}</div>
             <button class="link-btn" type="submit" formaction="/jobs/{{ j.id }}/resync-booking"

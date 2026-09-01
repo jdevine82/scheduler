@@ -72,6 +72,16 @@ Lists every job pulled from your watched ServiceM8 queues that hasn't been sched
 - **Search box** — filters by job number, customer name, or description as you type. Instant, no reload.
 - A ⚠ next to a job number means it's no longer sitting in a watched ServiceM8 queue (someone may have moved or closed it there) — it's flagged, not deleted, so you can investigate.
 
+### Adding a manual task
+
+Click **"+ Add task"** at the top of the sidebar to add something that isn't a ServiceM8 job at all — an internal errand, a reminder, anything you want on the board without it existing in ServiceM8. Give it a title and, optionally, a description.
+
+It's added to the sidebar as unscheduled, tagged **"Manual task,"** and from there behaves exactly like any other job: drag it onto the calendar, assign workers, change its status, resize it, delete it. The only difference is in its edit modal:
+
+- **Title and Description are directly editable** (there's no ServiceM8 record to defer to).
+- The **ServiceM8 booking** section just says it can't be booked there, since there's no ServiceM8 job behind it — no "Book in ServiceM8" button.
+- It's immune to ServiceM8 sync — it will never be updated, flagged, or removed by a sync, since sync only ever touches jobs it recognizes from ServiceM8.
+
 ## Top bar actions
 
 - **Sync now** — pulls the latest jobs from your watched ServiceM8 queues right away (instead of waiting for the background poll), and re-checks every booked job's ServiceM8 state at the same time.
