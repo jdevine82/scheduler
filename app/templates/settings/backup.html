@@ -1,0 +1,51 @@
+{% extends "settings/_base.html" %}
+{% block settings_content %}
+{% if restored == "ok" %}
+<div class="flash success">Database restored successfully. A copy of what was replaced was saved automatically in case you need to undo this.</div>
+{% elif restored == "invalid" %}
+<div class="flash error">That file doesn't look like a valid Job Scheduler backup — restore was cancelled and nothing was changed.</div>
+{% elif restored == "error" %}
+<div class="flash error">Something went wrong while restoring — nothing was changed. Check the server log for details.</div>
+{% endif %}
+
+<div class="card">
+  <h2>Download backup</h2>
+  <p style="font-size:12.5px; color:var(--text-secondary); margin-top:0;">
+    Downloads a complete copy of the current database (jobs, workers, statuses, users, settings) as a single file.
+  </p>
+  <a class="btn btn-primary" href="/settings/backup/download">Download backup now</a>
+</div>
+
+<div class="card">
+  <h2>Restore from backup</h2>
+  <p style="font-size:12.5px; color:var(--text-secondary); margin-top:0;">
+    Replaces <strong>everything</strong> in the live database with the contents of the uploaded backup file.
+    Anything created or changed since that backup was taken will be lost. A safety copy of the current database
+    is saved automatically right before the restore happens, in case this was a mistake.
+  </p>
+  <form method="post" action="/settings/backup/restore" enctype="multipart/form-data"
+        onsubmit="return confirm(&quot;This will permanently overwrite the live database with the uploaded file. Everything since the backup was taken will be lost. Continue?&quot;);">
+    <div class="form-row">
+      <div class="field-group">
+        <label for="backup_file">Backup file (.db)</label>
+        <input type="file" id="backup_file" name="backup_file" accept=".db" required>
+      </div>
+      <button class="btn btn-outline" type="submit" style="color:#B42318; border-color:#B42318;">Restore this backup</button>
+    </div>
+  </form>
+
+  {% if pre_restore_backups %}
+  <div style="margin-top:16px;">
+    <div class="field-label" style="margin-bottom:8px;">Safety copies saved automatically before past restores</div>
+    <table class="data-table">
+      {% for name in pre_restore_backups %}
+      <tr><td class="mono">{{ name }}</td></tr>
+      {% endfor %}
+    </table>
+    <div class="subtitle" style="margin-top:8px; margin-bottom:0;">
+      These live on the server's disk under <span class="mono">backups/</span> — ask whoever manages the server to retrieve one if needed.
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

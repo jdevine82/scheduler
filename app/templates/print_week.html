@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Border to Border — Week Schedule — {{ week_label }}</title>
+<style>
+  :root{
+    --bg-base:#FBFCFD; --bg-panel:#FFFFFF; --bg-elevated:#F3F6F8; --bg-hover:#E9EEF2;
+    --border:#E2E7EB; --border-strong:#C7D0D8;
+    --text-primary:#24292F; --text-secondary:#57606A; --text-muted:#8B95A1;
+    --accent:#1095C1; --accent-bright:#0D7EA3;
+  }
+  *{box-sizing:border-box;}
+  @page{ size: A4 landscape; margin: 10mm; }
+  body{margin:0; background:#fff; color:var(--text-primary); font-family:'Inter',system-ui,sans-serif; font-size:11px;}
+  .mono{font-family:'JetBrains Mono','SF Mono',monospace;}
+
+  .sheet{width:100%; margin:0 auto; padding:20px;}
+
+  .toolbar{display:flex; justify-content:flex-end; gap:8px; margin-bottom:16px;}
+  .toolbar button, .toolbar a{
+    border-radius:6px; padding:8px 14px; font-size:12.5px; font-weight:600; cursor:pointer;
+    font-family:inherit; border:1px solid var(--border-strong); background:none; color:var(--text-secondary);
+    text-decoration:none;
+  }
+  .toolbar .primary{background:var(--accent); color:#fff; border-color:var(--accent);}
+  @media print{ .toolbar{display:none;} .sheet{padding:0;} }
+
+  .header{display:flex; align-items:center; justify-content:space-between; padding-bottom:10px; border-bottom:2px solid var(--text-primary); margin-bottom:14px;}
+  .header .brand{display:flex; align-items:center; gap:10px;}
+  .header .brand img{height:22px; filter:invert(1);}
+  .header .brand .divider{width:1px; height:16px; background:var(--border-strong);}
+  .header .brand .app{color:var(--text-secondary); font-size:11px;}
+  .header .date{text-align:right;}
+  .header .date .day{font-size:18px; font-weight:700;}
+  .header .date .sub{font-size:10.5px; color:var(--text-muted); margin-top:2px;}
+
+  .board{display:flex; border:1px solid var(--border); border-radius:4px; overflow:hidden;}
+  .hourcol{width:38px; flex-shrink:0; border-right:1px solid var(--border);}
+  .hourcol .daylabel{height:22px; border-bottom:1px solid var(--border);}
+  .hourcol .hr{height:56px; font-size:8px; color:var(--text-muted); text-align:right; padding-right:4px; padding-top:1px; border-bottom:1px solid var(--border);}
+
+  .day{flex:1; border-right:1px solid var(--border); min-width:0;}
+  .day:last-child{border-right:none;}
+  .daylabel{height:22px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; background:var(--bg-elevated); border-bottom:1px solid var(--border);}
+  .daylabel.today{color:var(--accent-bright);}
+
+  .lanes{display:flex;}
+  .lane{flex:1; position:relative; border-right:1px solid var(--bg-hover); min-width:0;}
+  .lane:last-child{border-right:none;}
+  .lane-header{
+    height:14px; display:flex; align-items:center; justify-content:center; gap:2px;
+    font-size:7.5px; font-weight:700; background:var(--bg-panel); border-bottom:1px solid var(--border); color:var(--text-secondary);
+  }
+  .lane-header .swatch{width:5px; height:5px; border-radius:50%; flex-shrink:0;}
+  .lane-body{position:relative; background-image:repeating-linear-gradient(to bottom, transparent, transparent 55px, var(--border) 55px, var(--border) 56px);}
+  .empty-day-message{padding:14px 4px; text-align:center; color:var(--text-muted); font-size:8px;}
+
+  .job{position:absolute; left:1px; right:1px; border-radius:3px; padding:2px 3px; border-left:2px solid; background:var(--bg-elevated); overflow:hidden; font-size:7.5px;}
+  .job .num{font-size:6.5px; color:var(--text-muted);}
+  .job .cust{font-weight:700; font-size:7.5px; margin-top:1px; line-height:1.1;}
+  .job .time{font-size:6.5px; color:var(--text-secondary); margin-top:1px;}
+
+  .footer{display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:8px; border-top:1px solid var(--border);}
+  .legend{display:flex; gap:14px; flex-wrap:wrap;}
+  .legend .item{display:flex; align-items:center; gap:5px; font-size:9.5px; color:var(--text-secondary);}
+  .legend .dot{width:7px; height:7px; border-radius:50%;}
+  .printed{font-size:9px; color:var(--text-muted);}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="toolbar">
+    <a href="/week?start={{ days[0].date.isoformat() }}">&larr; Back to app</a>
+    <button class="primary" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+
+  <div class="header">
+    <div class="brand">
+      <img src="/static/assets/border-to-border-logo.png" alt="Border to Border">
+      <div class="divider"></div>
+      <div class="app">Job Scheduler — Week Sheet</div>
+    </div>
+    <div class="date">
+      <div class="day">{{ week_label }}</div>
+      <div class="sub">{{ job_count }} job{{ "s" if job_count != 1 else "" }} scheduled · {{ worker_filter.name if worker_filter else "All workers" }}</div>
+    </div>
+  </div>
+
+  <div class="board">
+    <div class="hourcol">
+      <div class="daylabel"></div>
+      {% for h in hours %}<div class="hr">{{ h }}</div>{% endfor %}
+    </div>
+
+    {% for d in days %}
+    <div class="day">
+      <div class="daylabel {% if d.date == today %}today{% endif %}">{{ d.date.strftime("%a %-d") }}</div>
+      <div class="lanes">
+        {% if d.lanes %}
+          {% for lane in d.lanes %}
+          <div class="lane">
+            <div class="lane-header"><div class="swatch" style="background:{{ lane.worker.color_hex }};"></div>{{ lane.worker.name[0] }}</div>
+            <div class="lane-body" style="height:{{ d.lane_height }}px;">
+              {% for b in lane.blocks %}
+              <div class="job" style="top:{{ b.top }}px; height:{{ b.height }}px; border-left-color:{{ b.job.status.color_hex }};">
+                <div class="num mono">#{{ b.job.job_number }}</div>
+                <div class="cust">{{ b.job.customer_name }}</div>
+                {% if b.height >= 30 %}<div class="time mono">{{ b.time_label }}</div>{% endif %}
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="lane"><div class="empty-day-message">No jobs</div></div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="footer">
+    <div class="legend">
+      {% for s in statuses %}
+      <div class="item"><div class="dot" style="background:{{ s.color_hex }};"></div>{{ s.name }}</div>
+      {% endfor %}
+    </div>
+    <div class="printed">Printed from Job Scheduler · Border to Border · {{ week_label }}</div>
+  </div>
+
+</div>
+</body>
+</html>

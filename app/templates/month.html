@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Month — Job Scheduler{% endblock %}
+{% block nav_extra %}
+<div class="toggle">
+  <a href="/month" class="active">Month</a>
+  <a href="/week" class="">Week</a>
+</div>
+<div class="date-range">
+  <a href="/month?year={{ prev_year }}&month={{ prev_month }}">&larr;</a>
+  <span>{{ month_label }}</span>
+  <a href="/month?year={{ next_year }}&month={{ next_month }}">&rarr;</a>
+</div>
+{% endblock %}
+{% block body %}
+<div class="layout">
+  {% include "_sidebar.html" %}
+
+  <div style="flex:1; display:flex; flex-direction:column;">
+    <div class="month-dow">
+      <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
+    </div>
+    <div class="month-grid">
+      {% for week in weeks %}
+        {% for d in week %}
+        <div class="month-cell {% if d.month != current_month %}other-month{% endif %}" data-day="{{ d.isoformat() }}">
+          <a class="cell-date {% if d == today %}today{% endif %}" href="/week?start={{ d.isoformat() }}">{{ d.day }}</a>
+          {% for j in jobs_by_day.get(d, [])[:4] %}
+          {% set is_locked = j.status.name == 'Booked with Customer' %}
+          <div class="month-block {% if is_locked %}locked{% endif %}" draggable="{{ 'false' if is_locked else 'true' }}" data-job-id="{{ j.id }}" data-open-url="/month?year={{ d.year }}&month={{ d.month }}&job={{ j.id }}"
+               data-worker-ids="{{ j.assignments|map(attribute='worker_id')|join(',') }}" style="border-left-color:{{ j.status.color_hex }};"
+               title="{{ j.customer_name }}{% if is_locked %} — booked with customer, double-click to edit{% endif %}">
+            {% if j.assignments %}<div class="swatch" style="background:{{ j.assignments[0].worker.color_hex }};"></div>{{ j.assignments[0].worker.name[0] }} ·{% endif %}
+            <span class="mono">#{{ j.job_number }}</span> {{ j.customer_name }}{% if is_locked %} &#128274;{% endif %}
+          </div>
+          {% endfor %}
+          {% if jobs_by_day.get(d, [])|length > 4 %}
+          <div style="font-size:10px; color:var(--text-muted);">+{{ jobs_by_day.get(d)|length - 4 }} more</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  {% for w in workers %}
+  <button class="item legend-worker" data-worker-id="{{ w.id }}"><div class="dot" style="background:{{ w.color_hex }};"></div>{{ w.name }}</button>
+  {% endfor %}
+  <div class="hint">Click a name to filter</div>
+</div>
+
+{% if open_job %}
+  {% set all_statuses = statuses %}
+  {% set all_workers = workers %}
+  {% set assigned_worker_ids = open_job.assignments|map(attribute="worker_id")|list %}
+  {% set return_to = "/month?year=" ~ current_year ~ "&month=" ~ current_month %}
+  {% include "_job_modal.html" %}
+{% endif %}
+
+<script src="/static/js/calendar.js"></script>
+{% endblock %}

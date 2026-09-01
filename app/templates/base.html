@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Job Scheduler{% endblock %}</title>
+<link rel="stylesheet" href="/static/css/style.css">
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<div class="topbar">
+  <a class="title" href="/">
+    <img src="/static/assets/border-to-border-logo.png" alt="Border to Border">
+    <div class="divider"></div>
+    <span class="app-name">Job Scheduler</span>
+  </a>
+  <div class="nav">
+    {% block nav_extra %}{% endblock %}
+    {% if user %}
+    {% set clean_url = (request.url.path ~ '?' ~ request.url.query if request.url.query else request.url.path)|strip_query_param('synced')|strip_query_param('purged')|strip_query_param('unbooked') %}
+    <form method="post" action="/sync-now" style="margin:0;">
+      <input type="hidden" name="return_to" value="{{ clean_url }}">
+      <button class="btn btn-outline btn-sm" type="submit" title="Pull the latest jobs from ServiceM8 now">&#8635; Sync now</button>
+    </form>
+    <form method="post" action="/jobs/purge-past" style="margin:0;"
+          onsubmit="return confirm('Delete all local jobs scheduled before this week? Anything still sitting in a watched ServiceM8 queue will come back as unscheduled on the next sync.');">
+      <input type="hidden" name="return_to" value="{{ clean_url }}">
+      <button class="btn btn-outline btn-sm" type="submit" title="Delete local jobs scheduled before this week">Clear past weeks</button>
+    </form>
+    {% if view %}
+    <button type="button" class="btn btn-outline btn-sm" id="print-dialog-open" title="Print or export a schedule">&#128424; Print</button>
+    {% endif %}
+    <div class="user-menu">
+      <span>{{ user.display_name }}</span>
+      {% if user.is_admin %}<a class="gear" href="/settings" title="Settings">&#9881;</a>{% endif %}
+      <form method="post" action="/logout"><button class="linklike" type="submit">Log out</button></form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if request.query_params.get("synced") == "ok" and request.query_params.get("unbooked") %}
+{% set unbooked_count = request.query_params.get("unbooked") %}
+<div class="flash error" style="margin:14px 20px 0 20px;">Synced with ServiceM8 — {{ unbooked_count }} booking{{ "s" if unbooked_count != "1" else "" }} no longer existed there and {{ "were" if unbooked_count != "1" else "was" }} unlocked and marked Cancelled.</div>
+{% elif request.query_params.get("synced") == "ok" %}
+<div class="flash success" style="margin:14px 20px 0 20px;">Synced with ServiceM8.</div>
+{% elif request.query_params.get("synced") == "nokey" %}
+<div class="flash error" style="margin:14px 20px 0 20px;">Set a ServiceM8 API key under Settings → Connection first.</div>
+{% elif request.query_params.get("synced") == "error" %}
+<div class="flash error" style="margin:14px 20px 0 20px;">Couldn't reach ServiceM8 — check the connection under Settings.</div>
+{% elif request.query_params.get("purged") is not none %}
+{% set purged_count = request.query_params.get("purged") %}
+<div class="flash success" style="margin:14px 20px 0 20px;">Cleared {{ purged_count }} past-week job{{ "s" if purged_count != "1" else "" }} from the local schedule. Anything still sitting in a watched ServiceM8 queue will come back as unscheduled on the next sync.</div>
+{% elif request.query_params.get("booked") == "ok" %}
+<div class="flash success" style="margin:14px 20px 0 20px;">Booked in ServiceM8 and status set to Booked with Customer.</div>
+{% elif request.query_params.get("booked") == "notscheduled" %}
+<div class="flash error" style="margin:14px 20px 0 20px;">That job needs a day, start time, and finish time before it can be booked in ServiceM8.</div>
+{% elif request.query_params.get("booked") == "nokey" %}
+<div class="flash error" style="margin:14px 20px 0 20px;">Set a ServiceM8 API key under Settings → Connection first.</div>
+{% elif request.query_params.get("booked") == "error" %}
+<div class="flash error" style="margin:14px 20px 0 20px;">Couldn't write the booking to ServiceM8 — check the connection under Settings and try again.</div>
+{% elif request.query_params.get("booked") == "notbooked" %}
+<div class="flash error" style="margin:14px 20px 0 20px;">That job isn't booked in ServiceM8 yet — nothing to re-sync.</div>
+{% elif request.query_params.get("booked") == "cancelled" %}
+<div class="flash error" style="margin:14px 20px 0 20px;">This booking no longer exists in ServiceM8 — the job has been unlocked and marked Cancelled.</div>
+{% elif request.query_params.get("booked") == "updated" %}
+<div class="flash success" style="margin:14px 20px 0 20px;">ServiceM8 had a different date/time for this booking — the calendar has been updated to match.</div>
+{% elif request.query_params.get("booked") == "insync" %}
+<div class="flash success" style="margin:14px 20px 0 20px;">Already in sync with ServiceM8.</div>
+{% endif %}
+
+{% if view %}
+<div class="overlay" id="print-dialog-overlay" style="display:none;">
+  <div class="modal" style="width:380px;">
+    <div class="modal-head">
+      <div class="jobnum">Print schedule</div>
+      <button type="button" class="modal-close" id="print-dialog-close">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field-group">
+        <div class="field-label">Scope</div>
+        <div style="display:flex; gap:16px;">
+          <label style="display:flex; align-items:center; gap:6px; font-size:12.5px; cursor:pointer;">
+            <input type="radio" name="print-scope" value="day" checked style="width:auto;"> Single day
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:12.5px; cursor:pointer;">
+            <input type="radio" name="print-scope" value="week" style="width:auto;"> Whole week
+          </label>
+        </div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Date</div>
+        <input class="select-input" type="date" id="print-dialog-date" value="{{ print_default_date }}">
+        <div style="font-size:10.5px; color:var(--text-muted);">For "Whole week," any date in that week works.</div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Worker</div>
+        <select class="select-input" id="print-dialog-worker">
+          <option value="">All workers</option>
+          {% for w in workers %}
+          <option value="{{ w.id }}">{{ w.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-outline" type="button" id="print-dialog-cancel">Cancel</button>
+        <button class="btn btn-primary" type="button" id="print-dialog-submit">Open print view</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% block body %}{% endblock %}
+
+</body>
+</html>

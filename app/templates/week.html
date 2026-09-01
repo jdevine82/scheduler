@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Week — Job Scheduler{% endblock %}
+{% block nav_extra %}
+<div class="toggle">
+  <a href="/month" class="">Month</a>
+  <a href="/week" class="active">Week</a>
+</div>
+<div class="date-range">
+  <a href="/week?start={{ prev_week }}">&larr;</a>
+  <span>{{ week_label }}</span>
+  <a href="/week?start={{ next_week }}">&rarr;</a>
+</div>
+{% endblock %}
+{% block body %}
+<div class="layout">
+  {% include "_sidebar.html" %}
+
+  <div class="calendar">
+    <div class="week">
+      <div class="hourcol">
+        <div class="daylabel"></div>
+        {% for h in hours %}<div class="hr">{{ h }}</div>{% endfor %}
+      </div>
+
+      {% for d in days %}
+      <div class="day">
+        <a class="daylabel {% if d.date == today %}today{% endif %}" href="/week?start={{ d.date.isoformat() }}">
+          {{ d.date.strftime("%a %-d") }}
+        </a>
+        <div class="lanes">
+          {% if d.lanes %}
+            {% for lane in d.lanes %}
+            <div class="lane" data-worker-id="{{ lane.worker.id }}">
+              <div class="lane-header">
+                <div class="swatch" style="background:{{ lane.worker.color_hex }};"></div>{{ lane.worker.name[0] }}
+              </div>
+              <div class="lane-body" data-day="{{ d.date.isoformat() }}" data-worker-id="{{ lane.worker.id }}" data-start-hour="{{ start_hour }}" style="height:{{ d.lane_height }}px;">
+                {% for b in lane.blocks %}
+                {% set is_locked = b.job.status.name == 'Booked with Customer' %}
+                <div class="job-block {% if b.linked %}linked{% endif %} {% if b.job.status.name == 'Cancelled' %}cancelled{% endif %} {% if is_locked %}locked{% endif %}"
+                     draggable="{{ 'false' if is_locked else 'true' }}" data-job-id="{{ b.job.id }}" data-duration-min="{{ b.duration_min }}"
+                     data-start-time="{{ b.job.start_time.strftime('%H:%M') }}" data-end-time="{{ b.job.end_time.strftime('%H:%M') }}"
+                     data-open-url="/week?start={{ days[0].date.isoformat() }}&job={{ b.job.id }}"
+                     title="{% if is_locked %}Booked with customer — double-click to edit, then re-sync the booking{% endif %}"
+                     style="top:{{ b.top }}px; height:{{ b.height }}px; background:{{ lane.worker.color_hex }}22; border-left-color:{{ b.job.status.color_hex }};">
+                  <div class="num mono">#{{ b.job.job_number }}{% if is_locked %} &#128274;{% endif %}</div>
+                  <div class="cust">{{ b.job.customer_name }}</div>
+                  <div class="time mono">{{ b.time_label }}{% if b.other_workers %} · w/ {{ b.other_workers|join(", ") }}{% endif %}</div>
+                  {% if b.short %}
+                    <div class="status-dot" style="background:{{ b.job.status.color_hex }};"></div>
+                  {% else %}
+                    <div class="status" style="color:{{ b.job.status.color_hex }};">{{ b.job.status.name }}</div>
+                  {% endif %}
+                  {% if not b.short and not is_locked %}
+                  <div class="duration-stepper">
+                    <button class="dur-btn dur-up" data-job-id="{{ b.job.id }}" title="Extend by 15 min">&#9650;</button>
+                    <button class="dur-btn dur-down" data-job-id="{{ b.job.id }}" title="Shorten by 15 min">&#9660;</button>
+                  </div>
+                  {% endif %}
+                  {% if not is_locked %}
+                  <div class="resize-handle" draggable="false"></div>
+                  {% endif %}
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="lane"><div class="lane-body empty-day" data-day="{{ d.date.isoformat() }}" style="height:{{ d.lane_height }}px;">No jobs — drop here to schedule</div></div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  {% for w in workers %}
+  <button class="item legend-worker" data-worker-id="{{ w.id }}"><div class="dot" style="background:{{ w.color_hex }};"></div>{{ w.name }}</button>
+  {% endfor %}
+  <div class="hint">Lane = who · left stripe = status · fill = worker (secondary) · click a name to filter</div>
+</div>
+
+{% if open_job %}
+  {% set all_statuses = statuses %}
+  {% set all_workers = workers %}
+  {% set assigned_worker_ids = open_job.assignments|map(attribute="worker_id")|list %}
+  {% set return_to = "/week?start=" ~ days[0].date.isoformat() %}
+  {% include "_job_modal.html" %}
+{% endif %}
+
+<script src="/static/js/calendar.js"></script>
+{% endblock %}

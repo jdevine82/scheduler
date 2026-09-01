@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log in — Job Scheduler</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="login-page">
+  <div class="login-card">
+    <img src="/static/assets/border-to-border-logo.png" alt="Border to Border">
+    <div class="app-name">Job Scheduler</div>
+    {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+    <form method="post" action="/login">
+      <div class="field-group">
+        <label for="username">Username</label>
+        <input class="plain" type="text" id="username" name="username" required autofocus>
+      </div>
+      <div class="field-group">
+        <label for="password">Password</label>
+        <input class="plain" type="password" id="password" name="password" required>
+      </div>
+      <button class="btn btn-primary" type="submit">Log in</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

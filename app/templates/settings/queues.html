@@ -1,0 +1,43 @@
+{% extends "settings/_base.html" %}
+{% block settings_content %}
+{% if refreshed == "nokey" or synced == "nokey" %}
+<div class="flash error">Set a ServiceM8 API key under Connection first.</div>
+{% elif refreshed == "error" or synced == "error" %}
+<div class="flash error">Couldn't reach ServiceM8 — check the API key under Connection.</div>
+{% elif refreshed is not none %}
+<div class="flash success">Queue list refreshed — {{ refreshed }} new queue{{ "s" if refreshed != "1" else "" }} found.</div>
+{% elif synced is not none %}
+<div class="flash success">Sync complete — {{ synced }} new job{{ "s" if synced != "1" else "" }} pulled in.</div>
+{% endif %}
+<div class="card">
+  <h2>Queues</h2>
+  {% if queues %}
+  <table class="data-table">
+    <tr><th>Name</th><th>Watched</th><th></th></tr>
+    {% for q in queues %}
+    <tr>
+      <td>{{ q.name }}</td>
+      <td>{% if q.watched %}<span class="badge"><span class="dot" style="background:var(--status-booked);"></span>Watched</span>{% else %}<span class="badge">Not watched</span>{% endif %}</td>
+      <td>
+        <form method="post" action="/settings/queues/{{ q.id }}/toggle" style="margin:0;">
+          <button class="btn btn-outline btn-sm" type="submit">{% if q.watched %}Stop watching{% else %}Watch{% endif %}</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="empty" style="color:var(--text-muted); font-size:12.5px;">
+    No queues yet — refresh from ServiceM8 below (make sure the API key is set under <a href="/settings/connection">Connection</a> first).
+  </div>
+  {% endif %}
+</div>
+<div class="card" style="display:flex; gap:10px;">
+  <form method="post" action="/settings/queues/refresh" style="margin:0;">
+    <button class="btn btn-outline" type="submit">Refresh queue list from ServiceM8</button>
+  </form>
+  <form method="post" action="/settings/queues/sync" style="margin:0;">
+    <button class="btn btn-outline" type="submit">Sync jobs now</button>
+  </form>
+</div>
+{% endblock %}

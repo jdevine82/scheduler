@@ -1,0 +1,26 @@
+<div class="sidebar">
+  <h3>Unscheduled — from ServiceM8</h3>
+  <form method="get" style="margin:0;">
+    {% if view == "week" %}<input type="hidden" name="start" value="{{ days[0].date.isoformat() }}">{% endif %}
+    <select class="queue-filter" name="queue" onchange="this.form.submit()" style="cursor:pointer;">
+      <option value="" {% if not selected_queue %}selected{% endif %}>All queues</option>
+      {% for q in queues %}
+      <option value="{{ q.name }}" {% if selected_queue == q.name %}selected{% endif %}>{{ q.name }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  <input type="text" id="sidebar-search" class="plain" placeholder="Search job #, customer, description…" style="margin-bottom:12px;">
+  {% if unscheduled_jobs %}
+    {% for j in unscheduled_jobs %}
+    <div class="job-card" draggable="true" data-job-id="{{ j.id }}">
+      <div class="num mono">#{{ j.job_number }}{% if j.flagged_missing_from_queue %} <span title="No longer in a watched ServiceM8 queue — check it hasn't been moved or closed" style="color:var(--status-urgent);">&#9888;</span>{% endif %}</div>
+      <div class="cust">{{ j.customer_name }}</div>
+      <div class="desc">{{ j.description[:90] }}{% if j.description|length > 90 %}…{% endif %}</div>
+      <div class="queue">{{ j.queue_name }}</div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">No unscheduled jobs{% if selected_queue %} in this queue{% endif %}.</div>
+  {% endif %}
+  <div class="empty" id="sidebar-search-empty" style="display:none;">No jobs match your search.</div>
+</div>

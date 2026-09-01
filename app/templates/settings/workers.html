@@ -1,0 +1,62 @@
+{% extends "settings/_base.html" %}
+{% block settings_content %}
+<div class="card">
+  <h2>Workers</h2>
+  {% if staff_fetch_error %}
+  <div class="flash error">{{ staff_fetch_error }}</div>
+  {% endif %}
+  <table class="data-table">
+    <tr><th>Name</th><th>Color</th><th>ServiceM8 staff</th><th>Active</th><th></th></tr>
+    {% for w in workers %}
+    <tr>
+      <td>
+        <form method="post" action="/settings/workers/{{ w.id }}/update" style="display:flex; gap:8px; align-items:center; margin:0;">
+          <input class="plain" type="text" name="name" value="{{ w.name }}" style="width:130px;">
+          <input type="color" name="color_hex" value="{{ w.color_hex }}">
+          <select class="plain" name="servicem8_staff_uuid" style="width:150px;" {% if not staff_list %}disabled{% endif %}>
+            <option value="">— none —</option>
+            {% for s in staff_list %}
+            <option value="{{ s.uuid }}" {% if s.uuid == w.servicem8_staff_uuid %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+          <button class="btn btn-outline btn-sm" type="submit">Save</button>
+        </form>
+      </td>
+      <td><span class="badge"><span class="dot" style="background:{{ w.color_hex }};"></span>{{ w.name }}</span></td>
+      <td style="font-size:11px; color:var(--text-secondary);">
+        {% if w.servicem8_staff_uuid %}
+          {% set matched = staff_list|selectattr("uuid", "equalto", w.servicem8_staff_uuid)|list %}
+          {{ matched[0].name if matched else "Linked (not in current list)" }}
+        {% else %}
+          Not linked
+        {% endif %}
+      </td>
+      <td>{% if w.active %}Active{% else %}Inactive{% endif %}</td>
+      <td style="display:flex; gap:6px;">
+        <form method="post" action="/settings/workers/{{ w.id }}/toggle-active" style="margin:0;">
+          <button class="btn btn-outline btn-sm" type="submit">{% if w.active %}Deactivate{% else %}Reactivate{% endif %}</button>
+        </form>
+        <form method="post" action="/settings/workers/{{ w.id }}/delete" style="margin:0;"
+              onsubmit="return confirm(&quot;Delete this worker permanently? This also removes them from any jobs they're assigned to. This can't be undone.&quot;);">
+          <button class="btn-danger-text" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="subtitle" style="margin-top:10px; margin-bottom:0;">
+    Linking a worker to ServiceM8 staff is optional and only used for the "Book in ServiceM8" write-back — the worker list itself always stays local.
+  </div>
+</div>
+<div class="card">
+  <h2>Add worker</h2>
+  <form method="post" action="/settings/workers" class="form-row">
+    <div class="field-group">
+      <label for="name">Name</label>
+      <input class="plain" type="text" id="name" name="name" required>
+    </div>
+    <button class="btn btn-primary" type="submit">Add</button>
+  </form>
+  <div class="subtitle" style="margin-top:10px; margin-bottom:0;">Color is auto-assigned from the palette; edit it above once added.</div>
+</div>
+{% endblock %}

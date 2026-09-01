@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Settings — Job Scheduler{% endblock %}
+{% block body %}
+<div class="page">
+  <h1>Settings</h1>
+  <div class="subtitle">Queues, statuses, workers and users — reachable by admins only.</div>
+  <div class="settings-tabs">
+    <a href="/settings/connection" class="{% if active_tab == 'connection' %}active{% endif %}">ServiceM8 connection</a>
+    <a href="/settings/queues" class="{% if active_tab == 'queues' %}active{% endif %}">Queues</a>
+    <a href="/settings/statuses" class="{% if active_tab == 'statuses' %}active{% endif %}">Statuses</a>
+    <a href="/settings/workers" class="{% if active_tab == 'workers' %}active{% endif %}">Workers</a>
+    <a href="/settings/users" class="{% if active_tab == 'users' %}active{% endif %}">Users</a>
+    <a href="/settings/backup" class="{% if active_tab == 'backup' %}active{% endif %}">Backup</a>
+  </div>
+  {% block settings_content %}{% endblock %}
+</div>
+{% endblock %}

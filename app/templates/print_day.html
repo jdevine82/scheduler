@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Border to Border — Day Schedule — {{ day.strftime("%a %-d %b %Y") }}</title>
+<style>
+  :root{
+    --bg-base:#FBFCFD; --bg-panel:#FFFFFF; --bg-elevated:#F3F6F8; --bg-hover:#E9EEF2;
+    --border:#E2E7EB; --border-strong:#C7D0D8;
+    --text-primary:#24292F; --text-secondary:#57606A; --text-muted:#8B95A1;
+    --accent:#1095C1; --accent-bright:#0D7EA3;
+  }
+  *{box-sizing:border-box;}
+  @page{ size: A4 landscape; margin: 12mm; }
+  body{margin:0; background:#fff; color:var(--text-primary); font-family:'Inter',system-ui,sans-serif; font-size:12px;}
+  .mono{font-family:'JetBrains Mono','SF Mono',monospace;}
+
+  .sheet{width:100%; max-width:1100px; margin:0 auto; padding:20px;}
+
+  .toolbar{display:flex; justify-content:flex-end; gap:8px; margin-bottom:16px;}
+  .toolbar button, .toolbar a{
+    border-radius:6px; padding:8px 14px; font-size:12.5px; font-weight:600; cursor:pointer;
+    font-family:inherit; border:1px solid var(--border-strong); background:none; color:var(--text-secondary);
+    text-decoration:none;
+  }
+  .toolbar .primary{background:var(--accent); color:#fff; border-color:var(--accent);}
+  @media print{ .toolbar{display:none;} .sheet{padding:0; max-width:none;} }
+
+  .header{display:flex; align-items:center; justify-content:space-between; padding-bottom:10px; border-bottom:2px solid var(--text-primary); margin-bottom:14px;}
+  .header .brand{display:flex; align-items:center; gap:10px;}
+  .header .brand img{height:22px; filter:invert(1);}
+  .header .brand .divider{width:1px; height:16px; background:var(--border-strong);}
+  .header .brand .app{color:var(--text-secondary); font-size:11px;}
+  .header .date{text-align:right;}
+  .header .date .day{font-size:18px; font-weight:700;}
+  .header .date .sub{font-size:10.5px; color:var(--text-muted); margin-top:2px;}
+
+  .board{display:flex; border:1px solid var(--border); border-radius:4px; overflow:hidden;}
+  .hourcol{width:46px; flex-shrink:0; border-right:1px solid var(--border);}
+  .hourcol .lane-head{height:26px; border-bottom:1px solid var(--border); background:var(--bg-elevated);}
+  .hourcol .hr{height:56px; font-size:9.5px; color:var(--text-muted); text-align:right; padding-right:6px; padding-top:2px; border-bottom:1px solid var(--border);}
+
+  .lane{flex:1; position:relative; border-right:1px solid var(--border);}
+  .lane:last-child{border-right:none;}
+  .lane-head{
+    height:26px; display:flex; align-items:center; justify-content:center; gap:6px;
+    font-size:11.5px; font-weight:700; background:var(--bg-elevated); border-bottom:1px solid var(--border);
+  }
+  .lane-head .swatch{width:8px; height:8px; border-radius:50%;}
+  .lane-body{position:relative; background-image:repeating-linear-gradient(to bottom, transparent, transparent 55px, var(--border) 55px, var(--border) 56px);}
+  .empty-day-message{padding:40px 20px; text-align:center; color:var(--text-muted); font-size:13px;}
+
+  .job{position:absolute; left:4px; right:4px; border-radius:4px; padding:6px 8px; border-left:3px solid; background:var(--bg-elevated); overflow:hidden;}
+  .job .num{font-size:9.5px; color:var(--text-muted);}
+  .job .cust{font-weight:700; font-size:11.5px; margin-top:1px;}
+  .job .time{font-size:9.5px; color:var(--text-secondary); margin-top:3px;}
+  .job .status{font-size:9.5px; font-weight:700; margin-top:3px;}
+
+  .footer{display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:8px; border-top:1px solid var(--border);}
+  .legend{display:flex; gap:14px; flex-wrap:wrap;}
+  .legend .item{display:flex; align-items:center; gap:5px; font-size:9.5px; color:var(--text-secondary);}
+  .legend .dot{width:7px; height:7px; border-radius:50%;}
+  .printed{font-size:9px; color:var(--text-muted);}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="toolbar">
+    <a href="/week?start={{ day.isoformat() }}">&larr; Back to app</a>
+    <button class="primary" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+
+  <div class="header">
+    <div class="brand">
+      <img src="/static/assets/border-to-border-logo.png" alt="Border to Border">
+      <div class="divider"></div>
+      <div class="app">Job Scheduler — Day Sheet</div>
+    </div>
+    <div class="date">
+      <div class="day">{{ day.strftime("%A %-d %B %Y") }}</div>
+      <div class="sub">
+        {% if job_count %}{{ job_count }} job{{ "s" if job_count != 1 else "" }} scheduled · {{ worker_names|join(", ") }}{% else %}No jobs scheduled{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="board">
+    <div class="hourcol">
+      <div class="lane-head"></div>
+      {% for h in hours %}<div class="hr">{{ h }}</div>{% endfor %}
+    </div>
+
+    {% if lanes %}
+      {% for lane in lanes %}
+      <div class="lane">
+        <div class="lane-head"><div class="swatch" style="background:{{ lane.worker.color_hex }};"></div>{{ lane.worker.name }}</div>
+        <div class="lane-body" style="height:{{ lane_height }}px;">
+          {% for b in lane.blocks %}
+          <div class="job" style="top:{{ b.top }}px; height:{{ b.height }}px; border-left-color:{{ b.job.status.color_hex }};">
+            <div class="num mono">#{{ b.job.job_number }}</div>
+            <div class="cust">{{ b.job.customer_name }}</div>
+            {% if b.short %}
+            <div class="time mono">{{ b.time_label }}{% if b.other_workers %} · w/ {{ b.other_workers|join(", ") }}{% endif %} · {{ b.job.status.name }}</div>
+            {% else %}
+            <div class="time mono">{{ b.time_label }}{% if b.other_workers %} · w/ {{ b.other_workers|join(", ") }}{% endif %}</div>
+            <div class="status" style="color:{{ b.job.status.color_hex }};">{{ b.job.status.name }}</div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="lane"><div class="empty-day-message">No jobs scheduled for this day.</div></div>
+    {% endif %}
+  </div>
+
+  <div class="footer">
+    <div class="legend">
+      {% for s in statuses %}
+      <div class="item"><div class="dot" style="background:{{ s.color_hex }};"></div>{{ s.name }}</div>
+      {% endfor %}
+    </div>
+    <div class="printed">Printed from Job Scheduler · Border to Border · {{ day.isoformat() }}</div>
+  </div>
+
+</div>
+</body>
+</html>

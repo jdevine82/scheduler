@@ -1,0 +1,29 @@
+{% extends "settings/_base.html" %}
+{% block settings_content %}
+{% if test_result == "ok" %}
+<div class="flash success">Connected — ServiceM8 accepted the API key.</div>
+{% elif test_result == "fail" %}
+<div class="flash error">Couldn't connect — check the API key and try again.</div>
+{% endif %}
+<div class="card">
+  <h2>ServiceM8 connection</h2>
+  <form method="post" action="/settings/connection">
+    <div class="form-row">
+      <div class="field-group" style="flex:1;">
+        <label for="api_key">API key {% if api_key_set %}<span style="color:var(--status-booked); font-weight:400;">(currently set)</span>{% endif %}</label>
+        <input class="plain" type="password" id="api_key" name="api_key" placeholder="{% if api_key_set %}•••••••••••••••• (leave blank to keep)&nbsp;{% else %}X-API-Key from ServiceM8 → Settings → API Keys{% endif %}">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field-group">
+        <label for="poll_interval">Poll interval (seconds)</label>
+        <input class="plain" type="number" id="poll_interval" name="poll_interval" value="{{ poll_interval }}" min="60">
+      </div>
+    </div>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </form>
+  <form method="post" action="/settings/connection/test" style="display:inline;">
+    <button class="btn btn-outline" type="submit" {% if not api_key_set %}disabled title="Save an API key first"{% endif %}>Test connection</button>
+  </form>
+</div>
+{% endblock %}

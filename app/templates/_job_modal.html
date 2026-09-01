@@ -1,0 +1,115 @@
+{% set j = open_job %}
+<div class="overlay" id="job-modal-overlay">
+  <div class="modal">
+    <form method="post" action="/jobs/{{ j.id }}">
+      <input type="hidden" name="return_to" value="{{ return_to }}">
+      <div class="modal-head">
+        <div class="jobnum"><span class="mono">#{{ j.job_number }}</span>{{ j.customer_name }}</div>
+        <a class="modal-close" href="{{ return_to }}">&#10005;</a>
+      </div>
+
+      <div class="modal-body">
+        {% if j.flagged_missing_from_queue %}
+        <div class="flash error">No longer in a watched ServiceM8 queue — it may have been moved or closed there. Local scheduling is untouched.</div>
+        {% endif %}
+        <div class="field-group">
+          <div class="field-label">Description — from ServiceM8</div>
+          <div class="readonly-box desc">{{ j.description }}</div>
+        </div>
+
+        <div class="field-group">
+          <div class="field-label">Status</div>
+          <select class="select-input" name="status_id">
+            {% for s in all_statuses %}
+            <option value="{{ s.id }}" {% if s.id == j.status_id %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field-group">
+          <div class="field-label">Assigned workers</div>
+          <div class="worker-chips">
+            {% for w in all_workers %}
+            <label class="chip-tag" style="cursor:pointer;">
+              <input type="checkbox" name="worker_ids" value="{{ w.id }}" style="width:auto; margin:0;"
+                {% if w.id in assigned_worker_ids %}checked{% endif %}>
+              <span class="swatch" style="background:{{ w.color_hex }};"></span>{{ w.name }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="field-group">
+          <div class="field-label">Day</div>
+          <input class="select-input" type="date" name="day" value="{{ j.day.isoformat() if j.day else '' }}">
+        </div>
+
+        {% set current_duration = j.start_time|duration_minutes(j.end_time) %}
+        <div class="row-2">
+          <div class="field-group">
+            <div class="field-label">Start time</div>
+            <input class="time-input mono" type="time" name="start_time" id="job-start-time" value="{{ j.start_time.strftime('%H:%M') if j.start_time else '' }}">
+          </div>
+          <div class="field-group">
+            <div class="field-label">Duration</div>
+            <select class="select-input" id="job-duration">
+              <option value="15">15 min</option>
+              <option value="30">30 min</option>
+              <option value="45">45 min</option>
+              <option value="60">1 hour</option>
+              <option value="90">1.5 hours</option>
+              <option value="120">2 hours</option>
+              <option value="180">3 hours</option>
+              <option value="240">4 hours</option>
+              <option value="360">6 hours</option>
+              <option value="480">8 hours</option>
+              <option value="custom">Custom…</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group" id="job-end-time-group">
+          <div class="field-label">Finish time</div>
+          <input class="time-input mono" type="time" name="end_time" id="job-end-time" readonly
+                 value="{{ j.end_time.strftime('%H:%M') if j.end_time else '' }}">
+          <div style="font-size:10.5px; color:var(--text-muted);">Set from start time + duration — pick "Custom…" above to enter it directly.</div>
+        </div>
+        <script>
+          document.addEventListener("DOMContentLoaded", function () {
+            initJobDurationField({{ current_duration if current_duration is not none else 'null' }});
+          });
+        </script>
+
+        {% set is_scheduled = j.day and j.start_time and j.end_time %}
+        <div class="field-group">
+          <div class="field-label">ServiceM8 booking</div>
+          {% if j.servicem8_booked %}
+          <div class="sm8-status">
+            <div class="left"><div class="check">&#10003;</div>Booked in ServiceM8 {% if j.servicem8_last_synced_at %}&middot; synced {{ j.servicem8_last_synced_at|relative_time }}{% endif %}</div>
+            <button class="link-btn" type="submit" formaction="/jobs/{{ j.id }}/resync-booking"
+                    onclick="return confirm(&quot;Check ServiceM8 for this booking's current date/time? If it was removed there, this job will be unlocked and marked Cancelled. If the date/time changed there, the calendar will be updated to match.&quot;);">Re-sync booking</button>
+          </div>
+          {% else %}
+          <div class="sm8-status not-booked">
+            <div class="left" style="color:var(--text-muted);">{% if is_scheduled %}Not booked in ServiceM8 yet{% else %}Set a day and time first{% endif %}</div>
+            <button class="btn btn-outline btn-sm" type="submit" formaction="/jobs/{{ j.id }}/book-in-servicem8"
+                    {% if not is_scheduled %}disabled{% endif %}
+                    onclick="return confirm('Book this job into ServiceM8 for {{ j.day.strftime('%d %b %Y') if j.day else '' }}? This also sets its status to Booked with Customer.');">Book in ServiceM8</button>
+          </div>
+          {% endif %}
+        </div>
+
+        {% if j.last_modified_by %}
+        <div style="font-size:11px; color:var(--text-muted); padding-top:2px;">Last edited by {{ j.last_modified_by.display_name }} &middot; {{ j.last_modified_at|relative_time }}</div>
+        {% endif %}
+      </div>
+
+      <div class="modal-foot">
+        <button class="btn-danger-text" type="submit" formaction="/jobs/{{ j.id }}/delete">Delete job</button>
+        <div style="display:flex; gap:8px;">
+          <a class="btn btn-outline" href="{{ return_to }}">Cancel</a>
+          <button class="btn btn-primary" type="submit">Save changes</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>

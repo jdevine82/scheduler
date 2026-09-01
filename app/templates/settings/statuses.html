@@ -1,0 +1,44 @@
+{% extends "settings/_base.html" %}
+{% block settings_content %}
+<div class="card">
+  <h2>Statuses</h2>
+  <table class="data-table">
+    <tr><th>Status</th><th>Color</th><th></th></tr>
+    {% for s in statuses %}
+    <tr>
+      <td>
+        <form method="post" action="/settings/statuses/{{ s.id }}/update" style="display:flex; gap:8px; align-items:center; margin:0;">
+          <input class="plain" type="text" name="name" value="{{ s.name }}" style="width:180px;" {% if s.is_locked %}readonly{% endif %}>
+          <input type="color" name="color_hex" value="{{ s.color_hex }}">
+          <button class="btn btn-outline btn-sm" type="submit">Save</button>
+        </form>
+      </td>
+      <td><span class="badge"><span class="dot" style="background:{{ s.color_hex }};"></span>{{ s.name }}</span></td>
+      <td>
+        {% if s.is_locked %}
+        <span class="badge" title="Required by the ServiceM8 booking write-back">Locked</span>
+        {% else %}
+        <form method="post" action="/settings/statuses/{{ s.id }}/delete" style="margin:0;">
+          <button class="btn-danger-text" type="submit">Delete</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+<div class="card">
+  <h2>Add status</h2>
+  <form method="post" action="/settings/statuses" class="form-row">
+    <div class="field-group">
+      <label for="name">Name</label>
+      <input class="plain" type="text" id="name" name="name" required>
+    </div>
+    <div class="field-group">
+      <label for="color_hex">Color</label>
+      <input type="color" id="color_hex" name="color_hex" value="#6B7684">
+    </div>
+    <button class="btn btn-primary" type="submit">Add</button>
+  </form>
+</div>
+{% endblock %}

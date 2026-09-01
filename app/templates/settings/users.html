@@ -1,0 +1,59 @@
+{% extends "settings/_base.html" %}
+{% block settings_content %}
+<div class="card">
+  <h2>Users</h2>
+  <table class="data-table">
+    <tr><th>Username</th><th>Display name</th><th>Admin</th><th>Active</th><th>Reset password</th><th></th></tr>
+    {% for u in users %}
+    <tr>
+      <td class="mono">{{ u.username }}</td>
+      <td>{{ u.display_name }}</td>
+      <td>
+        {% if u.id != user.id %}
+        <form method="post" action="/settings/users/{{ u.id }}/toggle-admin" style="margin:0;">
+          <button class="btn btn-outline btn-sm" type="submit">{% if u.is_admin %}Revoke admin{% else %}Make admin{% endif %}</button>
+        </form>
+        {% else %}
+        <span class="badge">You</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if u.id != user.id %}
+        <form method="post" action="/settings/users/{{ u.id }}/toggle-active" style="margin:0;">
+          <button class="btn btn-outline btn-sm" type="submit">{% if u.active %}Deactivate{% else %}Reactivate{% endif %}</button>
+        </form>
+        {% else %}{% if u.active %}Active{% endif %}{% endif %}
+      </td>
+      <td>
+        <form method="post" action="/settings/users/{{ u.id }}/reset-password" style="display:flex; gap:6px; margin:0;">
+          <input class="plain" type="password" name="new_password" placeholder="New password" required style="width:140px;">
+          <button class="btn btn-outline btn-sm" type="submit">Reset</button>
+        </form>
+      </td>
+      <td></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+<div class="card">
+  <h2>Add user</h2>
+  <form method="post" action="/settings/users" class="form-row">
+    <div class="field-group">
+      <label for="username">Username</label>
+      <input class="plain" type="text" id="username" name="username" required>
+    </div>
+    <div class="field-group">
+      <label for="display_name">Display name</label>
+      <input class="plain" type="text" id="display_name" name="display_name" required>
+    </div>
+    <div class="field-group">
+      <label for="password">Password</label>
+      <input class="plain" type="password" id="password" name="password" required>
+    </div>
+    <div class="field-group" style="min-width:auto;">
+      <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" name="is_admin" value="1" style="width:auto;"> Admin</label>
+    </div>
+    <button class="btn btn-primary" type="submit">Add</button>
+  </form>
+</div>
+{% endblock %}
