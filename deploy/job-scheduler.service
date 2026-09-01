@@ -1,0 +1,20 @@
+[Unit]
+Description=Job Scheduler (Border to Border)
+After=network.target
+
+[Service]
+Type=simple
+# Update these three paths/user to match your install:
+User=job-scheduler
+WorkingDirectory=/opt/job-scheduler
+ExecStart=/opt/job-scheduler/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8420
+
+Restart=on-failure
+RestartSec=5
+
+# Logs go to the systemd journal — view with `journalctl -u job-scheduler -f`
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

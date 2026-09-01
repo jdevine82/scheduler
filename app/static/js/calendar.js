@@ -84,22 +84,44 @@
     el.addEventListener("drop", () => el.classList.remove("drag-over"));
   }
 
-  // Sidebar search — instant client-side filter over the already-loaded
-  // (and possibly queue-filtered) unscheduled job cards, no reload needed.
+  // Sidebar search + queue filter — both instant and client-side over the
+  // already-loaded unscheduled job cards, no reload/re-fetch needed for
+  // either. The queue choice is remembered across page reloads (drag-and-drop
+  // reloads the page a lot) since there's no URL param driving it anymore.
   const sidebarSearch = document.getElementById("sidebar-search");
-  if (sidebarSearch) {
+  const sidebarQueueFilter = document.getElementById("sidebar-queue-filter");
+  if (sidebarSearch || sidebarQueueFilter) {
     const cards = document.querySelectorAll(".sidebar .job-card");
     const emptyState = document.getElementById("sidebar-search-empty");
-    sidebarSearch.addEventListener("input", () => {
-      const term = sidebarSearch.value.trim().toLowerCase();
+
+    function applySidebarFilters() {
+      const term = sidebarSearch ? sidebarSearch.value.trim().toLowerCase() : "";
+      const queue = sidebarQueueFilter ? sidebarQueueFilter.value : "";
       let visibleCount = 0;
       cards.forEach((card) => {
-        const matches = !term || card.textContent.toLowerCase().includes(term);
-        card.style.display = matches ? "" : "none";
-        if (matches) visibleCount += 1;
+        const matchesTerm = !term || card.textContent.toLowerCase().includes(term);
+        const matchesQueue = !queue || card.dataset.queue === queue;
+        const visible = matchesTerm && matchesQueue;
+        card.style.display = visible ? "" : "none";
+        if (visible) visibleCount += 1;
       });
-      if (emptyState) emptyState.style.display = term && visibleCount === 0 ? "" : "none";
-    });
+      if (emptyState) emptyState.style.display = (term || queue) && visibleCount === 0 ? "" : "none";
+    }
+
+    if (sidebarSearch) sidebarSearch.addEventListener("input", applySidebarFilters);
+
+    if (sidebarQueueFilter) {
+      const savedQueue = localStorage.getItem("sidebarQueueFilter") || "";
+      const hasOption = Array.from(sidebarQueueFilter.options).some((o) => o.value === savedQueue);
+      if (hasOption) sidebarQueueFilter.value = savedQueue;
+
+      sidebarQueueFilter.addEventListener("change", () => {
+        localStorage.setItem("sidebarQueueFilter", sidebarQueueFilter.value);
+        applySidebarFilters();
+      });
+    }
+
+    applySidebarFilters();
   }
 
   // Legend: click a worker's name to show only their jobs (week: full lanes,

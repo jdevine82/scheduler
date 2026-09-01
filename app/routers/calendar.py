@@ -4,13 +4,13 @@ import logging
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app import sync as servicem8_sync
 from app.config import WEEK_VIEW_END_HOUR, WEEK_VIEW_START_HOUR
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import Job, Queue, Status, User, Worker
+from app.models import Job, JobAssignment, Queue, Status, User, Worker
 from app.routers.settings import get_setting
 from app.scheduling import build_day_lanes, hour_labels, week_start
 from app.templating import templates
@@ -50,16 +50,15 @@ def sync_now(
         return RedirectResponse(f"{return_to}{separator}synced=error", status_code=303)
 
 
-def _sidebar_context(db: Session, queue_filter: str | None):
+def _sidebar_context(db: Session):
+    # Queue and search filtering both happen client-side (see calendar.js) —
+    # every unscheduled job is rendered once and instantly shown/hidden, no
+    # reload needed to switch queues.
     queues = db.query(Queue).filter(Queue.watched.is_(True)).order_by(Queue.name).all()
-    q = db.query(Job).filter(Job.day.is_(None))
-    if queue_filter:
-        q = q.filter(Job.queue_name == queue_filter)
-    unscheduled_jobs = q.order_by(Job.created_at.desc()).all()
+    unscheduled_jobs = db.query(Job).filter(Job.day.is_(None)).order_by(Job.created_at.desc()).all()
     return {
         "queues": queues,
         "unscheduled_jobs": unscheduled_jobs,
-        "selected_queue": queue_filter or "",
     }
 
 
@@ -67,7 +66,6 @@ def _sidebar_context(db: Session, queue_filter: str | None):
 def week_view(
     request: Request,
     start: str | None = None,
-    queue: str | None = None,
     job: int | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -104,7 +102,7 @@ def week_view(
         "end_hour": WEEK_VIEW_END_HOUR,
         "print_default_date": monday.isoformat(),
     }
-    ctx.update(_sidebar_context(db, queue))
+    ctx.update(_sidebar_context(db))
     return templates.TemplateResponse(request, "week.html", ctx)
 
 
@@ -188,7 +186,6 @@ def month_view(
     request: Request,
     year: int | None = None,
     month: int | None = None,
-    queue: str | None = None,
     job: int | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -204,6 +201,10 @@ def month_view(
     all_dates = [d for week in weeks for d in week]
     jobs = (
         db.query(Job)
+        .options(
+            selectinload(Job.assignments).selectinload(JobAssignment.worker),
+            selectinload(Job.status),
+        )
         .filter(Job.day.in_(all_dates))
         .order_by(Job.start_time.is_(None), Job.start_time)
         .all()
@@ -236,5 +237,5 @@ def month_view(
         "open_job": db.get(Job, job) if job else None,
         "print_default_date": (today if today.year == year and today.month == month else datetime.date(year, month, 1)).isoformat(),
     }
-    ctx.update(_sidebar_context(db, queue))
+    ctx.update(_sidebar_context(db))
     return templates.TemplateResponse(request, "month.html", ctx)

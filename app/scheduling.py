@@ -1,9 +1,9 @@
 import datetime
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.config import WEEK_VIEW_END_HOUR, WEEK_VIEW_START_HOUR
-from app.models import Job
+from app.models import Job, JobAssignment
 
 PX_PER_HOUR = 56
 SHORT_BLOCK_THRESHOLD_PX = 45
@@ -60,8 +60,16 @@ def build_day_lanes(
     """
     lane_body_height = (end_hour - start_hour) * PX_PER_HOUR
 
+    # Eager-load assignments -> worker and status in the same round trip —
+    # without this, each job.assignments / assignment.worker / job.status
+    # access below would fire its own query (N+1), and this function runs
+    # up to 7x per week-view request (once per day).
     jobs = (
         db.query(Job)
+        .options(
+            selectinload(Job.assignments).selectinload(JobAssignment.worker),
+            selectinload(Job.status),
+        )
         .filter(Job.day == day)
         .filter(Job.start_time.isnot(None))
         .filter(Job.end_time.isnot(None))
@@ -69,20 +77,18 @@ def build_day_lanes(
     )
 
     workers_seen = {}
+    jobs_by_worker_id: dict[int, list[Job]] = {}
     for job in jobs:
         for a in job.assignments:
             workers_seen.setdefault(a.worker.id, a.worker)
+            jobs_by_worker_id.setdefault(a.worker.id, []).append(job)
 
     active_workers = sorted(workers_seen.values(), key=lambda w: w.id)
 
     lanes = []
     for worker in active_workers:
         blocks = []
-        for job in jobs:
-            assigned_worker_ids = [a.worker_id for a in job.assignments]
-            if worker.id not in assigned_worker_ids:
-                continue
-
+        for job in jobs_by_worker_id[worker.id]:
             start_min = _time_to_minutes(job.start_time)
             end_min = _time_to_minutes(job.end_time)
             range_start_min = start_hour * 60
