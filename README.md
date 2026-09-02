@@ -5,6 +5,7 @@ A self-hosted job scheduling board for **Border to Border**, built for pulling u
 - **Backend**: Python, FastAPI, SQLite
 - **Frontend**: Server-rendered Jinja2 templates + vanilla JS (drag-and-drop, no framework)
 - **Deployment**: runs as a native process (systemd) on a Proxmox VM/LXC — no Docker
+- **Repo**: [github.com/jdevine82/scheduler](https://github.com/jdevine82/scheduler)
 
 ## Getting started
 
@@ -16,7 +17,7 @@ A self-hosted job scheduling board for **Border to Border**, built for pulling u
 ```
 app/
   models.py, database.py     — SQLAlchemy models and DB session
-  routers/                   — FastAPI route handlers (auth, calendar, jobs, settings)
+  routers/                   — FastAPI route handlers (auth, calendar, jobs, reports, settings)
   scheduling.py               — week/day lane-building logic shared by the calendar and print views
   servicem8.py, sync.py       — ServiceM8 API client and sync/reconciliation logic
   templates/                  — Jinja2 templates

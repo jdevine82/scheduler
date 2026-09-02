@@ -10,7 +10,7 @@ Self-hosted job scheduling board for Border to Border, built with Python/FastAPI
 ## 1. Get the code onto the server
 
 ```bash
-git clone <your-repo-url> job-scheduler
+git clone https://github.com/jdevine82/scheduler.git job-scheduler
 cd job-scheduler
 ```
 
