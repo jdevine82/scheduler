@@ -40,4 +40,4 @@ def login_submit(
 @router.post("/logout")
 def logout(request: Request):
     request.session.clear()
-    return RedirectResponse("/login", status_code=303)
+    return RedirectResponse("/", status_code=303)

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Day — Job Scheduler{% endblock %}
+{% block nav_extra %}
+<div class="toggle">
+  <a href="/month" class="">Month</a>
+  <a href="/week" class="">Week</a>
+  <a href="/day" class="active">Day</a>
+  {% if user %}<a href="/report" class="">Report</a>{% endif %}
+</div>
+<div class="date-range">
+  <a href="/day?date={{ prev_day }}">&larr;</a>
+  <span>{{ day_label }}</span>
+  <a href="/day?date={{ next_day }}">&rarr;</a>
+</div>
+{% endblock %}
+{% block body %}
+<div class="layout">
+  {% if user %}{% include "_sidebar.html" %}{% endif %}
+
+  <div class="calendar">
+    <div class="week">
+      <div class="hourcol">
+        <div class="daylabel"></div>
+        {% for h in hours %}<div class="hr">{{ h }}</div>{% endfor %}
+      </div>
+
+      <div class="day">
+        <a class="daylabel {% if date == today %}today{% endif %}" href="/week?start={{ date.isoformat() }}">
+          {{ date.strftime("%A %-d %b") }}
+        </a>
+        {% set col_date = date %}
+        {% set col_lanes = lanes %}
+        {% set col_lane_height = lane_height %}
+        {% set col_open_url_base = "/day?date=" ~ date.isoformat() %}
+        {% set col_header_full_name = true %}
+        {% include "_lane_column.html" %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  {% for w in workers %}
+  <button class="item legend-worker" data-worker-id="{{ w.id }}"><div class="dot" style="background:{{ w.color_hex }};"></div>{{ w.name }}</button>
+  {% endfor %}
+  <div class="hint">Lane = who · left stripe = status · fill = worker (secondary) · click a name to filter</div>
+</div>
+
+{% if open_job %}
+  {% set all_statuses = statuses %}
+  {% set all_workers = workers %}
+  {% set assigned_worker_ids = open_job.assignments|map(attribute="worker_id")|list %}
+  {% set return_to = "/day?date=" ~ date.isoformat() %}
+  {% include "_job_modal.html" %}
+{% endif %}
+
+<script src="/static/js/calendar.js"></script>
+{% endblock %}

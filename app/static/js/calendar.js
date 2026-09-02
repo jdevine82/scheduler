@@ -30,8 +30,12 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!res.ok) return null;
-    return res.json();
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      if (data && data.error === "worker_on_leave") alert(data.message);
+      return null;
+    }
+    return data;
   }
 
   function openJobModal(jobId) {
@@ -201,6 +205,10 @@
     laneBody.addEventListener("dragover", (e) => e.preventDefault());
     laneBody.addEventListener("drop", async (e) => {
       e.preventDefault();
+      if (laneBody.dataset.onLeave === "true") {
+        alert("This worker is on leave that day and can't be assigned.");
+        return;
+      }
       const data = JSON.parse(e.dataTransfer.getData("text/plain"));
       const rect = laneBody.getBoundingClientRect();
       const offsetY = e.clientY - rect.top;

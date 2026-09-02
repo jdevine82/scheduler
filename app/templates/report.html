@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Report — Job Scheduler{% endblock %}
+{% block nav_extra %}
+<div class="toggle">
+  <a href="/month" class="">Month</a>
+  <a href="/week" class="">Week</a>
+  <a href="/day" class="">Day</a>
+  <a href="/report" class="active">Report</a>
+</div>
+<div class="date-range">
+  <a href="/report?start={{ prev_week }}">&larr;</a>
+  <span>{{ week_label }}</span>
+  <a href="/report?start={{ next_week }}">&rarr;</a>
+</div>
+<a class="btn btn-outline btn-sm" href="/print/report?start={{ start }}" target="_blank" title="Print or export this report">&#128424; Print</a>
+{% endblock %}
+{% block body %}
+<div class="page">
+  <h1>Weekly report</h1>
+  <div class="subtitle">Scheduled jobs for {{ week_label }} that haven't moved to the completion queue yet, grouped by worker.</div>
+
+  {% if groups %}
+    {% for worker, jobs in groups %}
+    <div class="card">
+      <h2 style="display:flex; align-items:center; gap:10px;">
+        {% if worker %}
+        <span class="badge"><span class="dot" style="background:{{ worker.color_hex }};"></span>{{ worker.name }}</span>
+        {% else %}
+        <span class="badge">Unassigned</span>
+        {% endif %}
+        <span style="font-weight:400; color:var(--text-muted); font-size:12px;">{{ jobs|length }} job{{ "s" if jobs|length != 1 else "" }}</span>
+      </h2>
+      <table class="data-table">
+        <tr><th>Job #</th><th>Customer</th><th>Description</th></tr>
+        {% for j in jobs %}
+        <tr>
+          <td class="mono">#{{ j.job_number }}</td>
+          <td>{{ j.customer_name }}</td>
+          <td style="color:var(--text-secondary);">{{ j.description[:120] }}{% if j.description|length > 120 %}…{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="card">
+    <div class="empty" style="color:var(--text-muted); font-size:12.5px;">Nothing outstanding for this week — everything scheduled has moved to the completion queue.</div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

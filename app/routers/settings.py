@@ -12,7 +12,7 @@ from app import servicem8, sync
 from app.config import DATABASE_PATH
 from app.database import engine, get_db
 from app.deps import require_admin
-from app.models import JobAssignment, Queue, Setting, Status, User, Worker
+from app.models import JobAssignment, Queue, Setting, Status, User, Worker, WorkerLeave
 from app.security import hash_password
 from app.templating import templates
 
@@ -107,6 +107,7 @@ def queues_get(
     ctx["queues"] = db.query(Queue).order_by(Queue.name).all()
     ctx["refreshed"] = refreshed
     ctx["synced"] = synced
+    ctx["completion_queue_uuid"] = get_setting(db, "completion_queue_uuid")
     return templates.TemplateResponse(request, "settings/queues.html", ctx)
 
 
@@ -116,6 +117,17 @@ def queue_toggle(queue_id: int, user: User = Depends(require_admin), db: Session
     if q:
         q.watched = not q.watched
         db.commit()
+    return RedirectResponse("/settings/queues", status_code=303)
+
+
+@router.post("/queues/completion")
+def set_completion_queue(
+    completion_queue_uuid: str = Form(""),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    set_setting(db, "completion_queue_uuid", completion_queue_uuid)
+    db.commit()
     return RedirectResponse("/settings/queues", status_code=303)
 
 
@@ -137,7 +149,8 @@ def queues_sync_now(user: User = Depends(require_admin), db: Session = Depends(g
     if not api_key:
         return RedirectResponse("/settings/queues?synced=nokey", status_code=303)
     try:
-        summary = sync.sync_jobs(db, api_key)
+        completion_queue_uuid = get_setting(db, "completion_queue_uuid")
+        summary = sync.sync_jobs(db, api_key, completion_queue_uuid)
         return RedirectResponse(f"/settings/queues?synced={summary['added']}", status_code=303)
     except Exception:
         return RedirectResponse("/settings/queues?synced=error", status_code=303)
@@ -249,6 +262,49 @@ def worker_delete(worker_id: int, user: User = Depends(require_admin), db: Sessi
         db.delete(w)
         db.commit()
     return RedirectResponse("/settings/workers", status_code=303)
+
+
+@router.get("/holidays")
+def holidays_get(
+    request: Request,
+    error: str | None = None,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    ctx = _base_ctx(request, user, "holidays")
+    ctx["leave_periods"] = (
+        db.query(WorkerLeave).join(Worker).order_by(WorkerLeave.start_date.desc()).all()
+    )
+    ctx["workers"] = db.query(Worker).filter(Worker.active.is_(True)).order_by(Worker.name).all()
+    ctx["error"] = error
+    return templates.TemplateResponse(request, "settings/holidays.html", ctx)
+
+
+@router.post("/holidays")
+def holiday_create(
+    worker_id: int = Form(...),
+    start_date: str = Form(...),
+    end_date: str = Form(...),
+    reason: str = Form(""),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    start = datetime.date.fromisoformat(start_date)
+    end = datetime.date.fromisoformat(end_date)
+    if end < start:
+        return RedirectResponse("/settings/holidays?error=daterange", status_code=303)
+    db.add(WorkerLeave(worker_id=worker_id, start_date=start, end_date=end, reason=reason))
+    db.commit()
+    return RedirectResponse("/settings/holidays", status_code=303)
+
+
+@router.post("/holidays/{leave_id}/delete")
+def holiday_delete(leave_id: int, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    h = db.get(WorkerLeave, leave_id)
+    if h:
+        db.delete(h)
+        db.commit()
+    return RedirectResponse("/settings/holidays", status_code=303)
 
 
 @router.get("/users")

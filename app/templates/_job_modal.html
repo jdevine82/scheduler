@@ -1,16 +1,57 @@
 {% set j = open_job %}
 <div class="overlay" id="job-modal-overlay">
   <div class="modal">
+    <div class="modal-head">
+      <div class="jobnum"><span class="mono">#{{ j.job_number }}</span>{{ j.customer_name }}</div>
+      <a class="modal-close" href="{{ return_to }}">&#10005;</a>
+    </div>
+
+    {% if not user %}
+    <div class="modal-body">
+      <div class="field-group">
+        <div class="field-label">Description</div>
+        <div class="readonly-box desc">{{ j.description or "—" }}</div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Status</div>
+        <div class="badge"><span class="dot" style="background:{{ j.status.color_hex }};"></span>{{ j.status.name }}</div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Assigned workers</div>
+        <div class="worker-chips">
+          {% for a in j.assignments %}
+          <div class="chip-tag"><span class="swatch" style="background:{{ a.worker.color_hex }};"></span>{{ a.worker.name }}</div>
+          {% else %}
+          <div style="color:var(--text-muted); font-size:12px;">Unassigned</div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Scheduled</div>
+        <div class="readonly-box">
+          {% if j.day %}{{ j.day.strftime("%A %d %b %Y") }}{% if j.start_time and j.end_time %} · {{ j.start_time.strftime("%-I:%M %p") }}–{{ j.end_time.strftime("%-I:%M %p") }}{% endif %}{% else %}Not yet scheduled{% endif %}
+        </div>
+      </div>
+      {% if j.servicem8_booked %}
+      <div class="field-group">
+        <div class="field-label">ServiceM8 booking</div>
+        <div class="sm8-status"><div class="left"><div class="check">&#10003;</div>Booked in ServiceM8</div></div>
+      </div>
+      {% endif %}
+    </div>
+    <div class="modal-foot">
+      <div></div>
+      <a class="btn btn-outline" href="{{ return_to }}">Close</a>
+    </div>
+    {% else %}
     <form method="post" action="/jobs/{{ j.id }}">
       <input type="hidden" name="return_to" value="{{ return_to }}">
-      <div class="modal-head">
-        <div class="jobnum"><span class="mono">#{{ j.job_number }}</span>{{ j.customer_name }}</div>
-        <a class="modal-close" href="{{ return_to }}">&#10005;</a>
-      </div>
-
       <div class="modal-body">
         {% if j.flagged_missing_from_queue %}
         <div class="flash error">No longer in a watched ServiceM8 queue — it may have been moved or closed there. Local scheduling is untouched.</div>
+        {% endif %}
+        {% if leave_conflict %}
+        <div class="flash error">{{ leave_conflict }}</div>
         {% endif %}
         {% if j.is_manual %}
         <div class="field-group">
@@ -41,10 +82,16 @@
           <div class="field-label">Assigned workers</div>
           <div class="worker-chips">
             {% for w in all_workers %}
-            <label class="chip-tag" style="cursor:pointer;">
+            {% set w_on_leave = w.id in leave_worker_ids %}
+            {% set w_assigned = w.id in assigned_worker_ids %}
+            <label class="chip-tag {% if w_on_leave %}on-leave{% endif %}"
+                   style="cursor:{{ 'not-allowed' if (w_on_leave and not w_assigned) else 'pointer' }};"
+                   title="{% if w_on_leave %}{{ w.name }} is on leave{% if w_assigned %} — this assignment now conflicts{% endif %}{% endif %}">
               <input type="checkbox" name="worker_ids" value="{{ w.id }}" style="width:auto; margin:0;"
-                {% if w.id in assigned_worker_ids %}checked{% endif %}>
+                {% if w_assigned %}checked{% endif %}
+                {% if w_on_leave and not w_assigned %}disabled{% endif %}>
               <span class="swatch" style="background:{{ w.color_hex }};"></span>{{ w.name }}
+              {% if w_on_leave %}<span class="leave-icon">{% if w_assigned %}&#9888;{% else %}&#127796;{% endif %}</span>{% endif %}
             </label>
             {% endfor %}
           </div>
@@ -126,5 +173,6 @@
         </div>
       </div>
     </form>
+    {% endif %}
   </div>
 </div>

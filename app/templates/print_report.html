@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Border to Border — Weekly Report — {{ week_label }}</title>
+<style>
+  :root{
+    --bg-base:#FBFCFD; --bg-panel:#FFFFFF; --bg-elevated:#F3F6F8; --bg-hover:#E9EEF2;
+    --border:#E2E7EB; --border-strong:#C7D0D8;
+    --text-primary:#24292F; --text-secondary:#57606A; --text-muted:#8B95A1;
+    --accent:#1095C1; --accent-bright:#0D7EA3;
+  }
+  *{box-sizing:border-box;}
+  @page{ size: A4 portrait; margin: 14mm; }
+  body{margin:0; background:#fff; color:var(--text-primary); font-family:'Inter',system-ui,sans-serif; font-size:12px;}
+  .mono{font-family:'JetBrains Mono','SF Mono',monospace;}
+
+  .sheet{width:100%; max-width:900px; margin:0 auto; padding:20px;}
+
+  .toolbar{display:flex; justify-content:flex-end; gap:8px; margin-bottom:16px;}
+  .toolbar button, .toolbar a{
+    border-radius:6px; padding:8px 14px; font-size:12.5px; font-weight:600; cursor:pointer;
+    font-family:inherit; border:1px solid var(--border-strong); background:none; color:var(--text-secondary);
+    text-decoration:none;
+  }
+  .toolbar .primary{background:var(--accent); color:#fff; border-color:var(--accent);}
+  @media print{ .toolbar{display:none;} .sheet{padding:0; max-width:none;} }
+
+  .header{display:flex; align-items:center; justify-content:space-between; padding-bottom:10px; border-bottom:2px solid var(--text-primary); margin-bottom:14px;}
+  .header .brand{display:flex; align-items:center; gap:10px;}
+  .header .brand img{height:22px; filter:invert(1);}
+  .header .brand .divider{width:1px; height:16px; background:var(--border-strong);}
+  .header .brand .app{color:var(--text-secondary); font-size:11px;}
+  .header .date{text-align:right;}
+  .header .date .day{font-size:18px; font-weight:700;}
+  .header .date .sub{font-size:10.5px; color:var(--text-muted); margin-top:2px;}
+
+  .group{margin-bottom:18px; break-inside:avoid;}
+  .group h2{font-size:13px; margin:0 0 6px 0; display:flex; align-items:center; gap:8px;}
+  .group h2 .swatch{width:9px; height:9px; border-radius:50%; flex-shrink:0;}
+  .group h2 .count{font-weight:400; color:var(--text-muted); font-size:10.5px;}
+
+  table{width:100%; border-collapse:collapse; font-size:11px;}
+  th{text-align:left; border-bottom:1px solid var(--text-primary); padding:5px 6px; color:var(--text-secondary); font-size:9.5px; text-transform:uppercase; letter-spacing:0.03em;}
+  td{padding:5px 6px; border-bottom:1px solid var(--border); vertical-align:top;}
+
+  .empty-message{padding:40px 20px; text-align:center; color:var(--text-muted); font-size:13px;}
+
+  .footer{display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:8px; border-top:1px solid var(--border);}
+  .printed{font-size:9px; color:var(--text-muted);}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="toolbar">
+    <a href="/report?start={{ start }}">&larr; Back to app</a>
+    <button class="primary" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+
+  <div class="header">
+    <div class="brand">
+      <img src="/static/assets/border-to-border-logo.png" alt="Border to Border">
+      <div class="divider"></div>
+      <div class="app">Job Scheduler — Weekly Report</div>
+    </div>
+    <div class="date">
+      <div class="day">{{ week_label }}</div>
+      <div class="sub">{% if groups %}Jobs not yet in the completion queue{% else %}Nothing outstanding{% endif %}</div>
+    </div>
+  </div>
+
+  {% if groups %}
+    {% for worker, jobs in groups %}
+    <div class="group">
+      <h2>
+        {% if worker %}<span class="swatch" style="background:{{ worker.color_hex }};"></span>{{ worker.name }}{% else %}Unassigned{% endif %}
+        <span class="count">{{ jobs|length }} job{{ "s" if jobs|length != 1 else "" }}</span>
+      </h2>
+      <table>
+        <tr><th style="width:70px;">Job #</th><th style="width:170px;">Customer</th><th>Description</th></tr>
+        {% for j in jobs %}
+        <tr>
+          <td class="mono">#{{ j.job_number }}</td>
+          <td>{{ j.customer_name }}</td>
+          <td>{{ j.description }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-message">Nothing outstanding for this week — everything scheduled has moved to the completion queue.</div>
+  {% endif %}
+
+  <div class="footer">
+    <div></div>
+    <div class="printed">Printed from Job Scheduler · Border to Border · {{ week_label }}</div>
+  </div>
+
+</div>
+</body>
+</html>

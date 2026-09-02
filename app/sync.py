@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_STATUS_FOR_NEW_JOBS = "Loosely Planned"
 CANCELLED_STATUS_NAME = "Cancelled"
+COMPLETED_STATUS_NAME = "Completed"
 
 
 def refresh_queues(db: Session, api_key: str) -> int:
@@ -36,7 +37,35 @@ def refresh_queues(db: Session, api_key: str) -> int:
     return added
 
 
-def sync_jobs(db: Session, api_key: str) -> dict:
+def _apply_completions(db: Session, api_key: str, completion_queue_uuid: str) -> int:
+    """Mark local jobs Completed if ServiceM8 now shows them sitting in the
+    configured completion queue. Overrides the "never auto-change away from
+    Booked with Customer" rule that governs booking write-back/re-sync —
+    the queue move is a stronger, more direct signal the work is actually
+    done. Returns the count of jobs newly marked Completed."""
+    completed_status = db.query(Status).filter(Status.name == COMPLETED_STATUS_NAME).first()
+    if completed_status is None:
+        return 0
+
+    remote_uuids = {j["uuid"] for j in servicem8.fetch_jobs_in_queue(api_key, completion_queue_uuid)}
+    if not remote_uuids:
+        return 0
+
+    queue = db.query(Queue).filter(Queue.servicem8_queue_uuid == completion_queue_uuid).first()
+    jobs = (
+        db.query(Job)
+        .filter(Job.servicem8_uuid.in_(remote_uuids), Job.status_id != completed_status.id)
+        .all()
+    )
+    for job in jobs:
+        job.status_id = completed_status.id
+        if queue:
+            job.queue_name = queue.name
+        job.flagged_missing_from_queue = False
+    return len(jobs)
+
+
+def sync_jobs(db: Session, api_key: str, completion_queue_uuid: str | None = None) -> dict:
     """Pull jobs from watched queues. Returns a summary dict for logging."""
     watched_queues = db.query(Queue).filter(Queue.watched.is_(True)).all()
     default_status = db.query(Status).filter(Status.name == DEFAULT_STATUS_FOR_NEW_JOBS).first()
@@ -97,7 +126,16 @@ def sync_jobs(db: Session, api_key: str) -> dict:
             flagged += 1
 
     db.commit()
-    return {"added": added, "updated": updated, "flagged": flagged, "unflagged": unflagged}
+
+    completed = 0
+    if completion_queue_uuid:
+        try:
+            completed = _apply_completions(db, api_key, completion_queue_uuid)
+            db.commit()
+        except Exception:
+            logger.exception("Completion-queue check failed")
+
+    return {"added": added, "updated": updated, "flagged": flagged, "unflagged": unflagged, "completed": completed}
 
 
 def reconcile_booking(db: Session, api_key: str, job: Job) -> str:

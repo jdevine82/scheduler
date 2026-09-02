@@ -46,6 +46,16 @@ In the modal you can change:
 
 A breadcrumb at the bottom shows who last edited the job and when.
 
+## Worker holidays
+
+Admins can record one or more holiday/leave periods per worker under **Settings → Holidays** (worker, start date, finish date, and an optional reason). Once a period is on file:
+
+- That worker's lane still shows on the calendar for every day within the holiday — even with no jobs scheduled — striped and labelled **"On leave"**, so their absence is visible at a glance without having to try assigning them.
+- They can't be dragged onto, or ticked in the edit modal for, any day within that period. The app blocks it outright with an explanation — there's no override.
+- If a job was already assigned to them before the holiday was added, it's left alone rather than automatically unassigned — the block gets a small ⚠ so the clash is visible and you can decide how to resolve it (reassign, reschedule, or leave it).
+
+Leave is entirely local to this app — it isn't imported from or written back to ServiceM8.
+
 ## Booking into ServiceM8
 
 Once a job has a day, start time, and finish time, the modal's **"Book in ServiceM8"** button becomes active. Clicking it:
@@ -99,14 +109,23 @@ Click **Print** in the top bar and choose:
 
 This opens a clean, chrome-free printable sheet in a new tab — use the **"Print / Save as PDF"** button there (or your browser's own print function) to get a physical copy or PDF.
 
+## Weekly report
+
+Click **Report** next to Month/Week/Day (logged-in users only) to see which scheduled jobs from a given week still haven't been finished.
+
+- Set a **completion queue** first, under Settings → Queues — pick whichever ServiceM8 queue means "done" for your workflow. Once that's set, any scheduled job that moves into that queue in ServiceM8 gets its status here switched to **Completed** automatically the next time a sync runs (background poll or "Sync now") — even if it was previously Booked with Customer, since the queue move is treated as a stronger signal that the work is actually done.
+- The report lists everything scheduled for the selected week that *hasn't* moved to the completion queue yet, grouped by worker — job number, customer, and description for each. A job assigned to more than one worker shows up under each of them. Use the ← → arrows to check other weeks.
+- If nothing's outstanding, the report just says so.
+
 ## Settings (admin only)
 
 | Tab | What it's for |
 |---|---|
 | **ServiceM8 connection** | API key, poll interval, and a "Test connection" check. |
-| **Queues** | Which ServiceM8 queues get pulled into the sidebar. "Refresh queue list" fetches the current names from ServiceM8; toggle **Watch** per queue. |
+| **Queues** | Which ServiceM8 queues get pulled into the sidebar. "Refresh queue list" fetches the current names from ServiceM8; toggle **Watch** per queue. Also where you set the **completion queue** used by the weekly report (see below). |
 | **Statuses** | Add, rename, recolour, or delete statuses. "Booked with Customer" is locked — it can't be renamed or deleted, since the booking write-back depends on it existing. |
 | **Workers** | Add/rename/recolour/deactivate/delete your team. Optionally link each one to their matching ServiceM8 staff member — only needed for "Book in ServiceM8" to work, the worker list itself always stays local to this app. |
+| **Holidays** | Record one or more leave periods per worker (start date, finish date, optional reason). The app then blocks scheduling that worker on any day within the period, and shows their lane as on-leave on the calendar. |
 | **Users** | Create logins for your team, reset passwords, toggle admin access, deactivate accounts. |
 | **Backup** | Download a full copy of the database any time. Restoring from a backup file replaces *everything* currently in the app — a safety copy of what it replaces is taken automatically first. |
 

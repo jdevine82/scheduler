@@ -20,7 +20,10 @@ def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -
     user_id = request.session.get("user_id")
     if user_id is None:
         return None
-    return db.get(User, user_id)
+    user = db.get(User, user_id)
+    if user is None or not user.active:
+        return None
+    return user
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:

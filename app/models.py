@@ -48,6 +48,22 @@ class Worker(Base):
     servicem8_staff_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     assignments: Mapped[list["JobAssignment"]] = relationship(back_populates="worker")
+    leave_periods: Mapped[list["WorkerLeave"]] = relationship(
+        back_populates="worker", cascade="all, delete-orphan"
+    )
+
+
+class WorkerLeave(Base):
+    __tablename__ = "worker_leave"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    worker_id: Mapped[int] = mapped_column(ForeignKey("workers.id"))
+    start_date: Mapped[datetime.date] = mapped_column(Date)
+    end_date: Mapped[datetime.date] = mapped_column(Date)
+    reason: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=now)
+
+    worker: Mapped["Worker"] = relationship(back_populates="leave_periods")
 
 
 class Status(Base):

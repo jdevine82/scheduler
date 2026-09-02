@@ -1,6 +1,7 @@
 import datetime
 import logging
 import uuid
+from urllib.parse import quote_plus
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -11,7 +12,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import Job, JobAssignment, Status, User
 from app.routers.settings import get_setting
-from app.scheduling import week_start
+from app.scheduling import week_start, worker_on_leave_conflict, workers_needing_leave_check
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,21 @@ async def update_job(
     if job is None:
         return RedirectResponse(return_to, status_code=303)
 
+    day_str = form.get("day")
+    new_day = datetime.date.fromisoformat(day_str) if day_str else None
+    new_worker_ids = {int(v) for v in form.getlist("worker_ids")}
+    current_worker_ids = {a.worker_id for a in job.assignments}
+    day_changed = new_day != job.day
+
+    check_worker_ids = workers_needing_leave_check(current_worker_ids, new_worker_ids, day_changed)
+    conflict = worker_on_leave_conflict(db, new_day, check_worker_ids)
+    if conflict:
+        message = f"Can't save — {conflict.name} is on leave on {new_day.strftime('%d %b %Y')}."
+        separator = "&" if "?" in return_to else "?"
+        return RedirectResponse(
+            f"{return_to}{separator}job={job_id}&leave_conflict={quote_plus(message)}", status_code=303
+        )
+
     # Only a manual task's modal actually submits these fields — a
     # ServiceM8-sourced job's title/description stay read-only in the UI.
     if job.is_manual:
@@ -116,8 +132,7 @@ async def update_job(
     if status_id:
         job.status_id = int(status_id)
 
-    day = form.get("day")
-    job.day = datetime.date.fromisoformat(day) if day else None
+    job.day = new_day
 
     start_time = form.get("start_time")
     job.start_time = datetime.time.fromisoformat(start_time) if start_time else None
@@ -125,8 +140,7 @@ async def update_job(
     end_time = form.get("end_time")
     job.end_time = datetime.time.fromisoformat(end_time) if end_time else None
 
-    worker_ids = {int(v) for v in form.getlist("worker_ids")}
-    _set_assigned_workers(job, worker_ids)
+    _set_assigned_workers(job, new_worker_ids)
 
     _touch(job, user)
     db.commit()
@@ -255,8 +269,34 @@ async def schedule_job(
     if job is None:
         return JSONResponse({"error": "not found"}, status_code=404)
 
-    if payload.get("day"):
-        job.day = datetime.date.fromisoformat(payload["day"])
+    effective_day = datetime.date.fromisoformat(payload["day"]) if payload.get("day") else job.day
+    day_changed = bool(payload.get("day")) and effective_day != job.day
+    current_worker_ids = {a.worker_id for a in job.assignments}
+    dropped_worker_id = int(payload["worker_id"]) if payload.get("worker_id") else None
+
+    # Dropping a job onto a lane for someone already assigned to it is just a
+    # time/day move — a multi-worker job must keep its whole team, not
+    # collapse down to the one lane it happened to land in. Dropping onto a
+    # lane for someone NOT currently assigned is an explicit reassignment
+    # (spec §6.2), which replaces the assignment as before.
+    if dropped_worker_id is not None and dropped_worker_id not in current_worker_ids:
+        new_worker_ids = {dropped_worker_id}
+    else:
+        new_worker_ids = current_worker_ids
+
+    check_worker_ids = workers_needing_leave_check(current_worker_ids, new_worker_ids, day_changed)
+    conflict = worker_on_leave_conflict(db, effective_day, check_worker_ids)
+    if conflict:
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": "worker_on_leave",
+                "message": f"{conflict.name} is on leave on {effective_day.strftime('%d %b %Y')}.",
+            },
+            status_code=409,
+        )
+
+    job.day = effective_day
     if payload.get("start_time"):
         job.start_time = datetime.time.fromisoformat(payload["start_time"])
     if payload.get("end_time"):
@@ -270,8 +310,8 @@ async def schedule_job(
         job.start_time = datetime.time(8, 0)
         job.end_time = datetime.time(9, 0)
 
-    if payload.get("worker_id"):
-        _set_assigned_workers(job, {int(payload["worker_id"])})
+    if dropped_worker_id is not None:
+        _set_assigned_workers(job, new_worker_ids)
 
     _touch(job, user)
     db.commit()

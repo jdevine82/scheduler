@@ -1,0 +1,50 @@
+{# Renders one day's worker swimlanes — the .lanes block shared by week.html
+   (one call per day column) and day.html (a single, wider column). Expects
+   in context: col_date, col_lanes, col_lane_height, col_open_url_base
+   (job links get "&job=<id>" appended), col_header_full_name (bool — full
+   name vs first initial in the lane header), start_hour, user. #}
+<div class="lanes">
+  {% if col_lanes %}
+    {% for lane in col_lanes %}
+    <div class="lane {% if lane.on_leave %}on-leave{% endif %}" data-worker-id="{{ lane.worker.id }}">
+      <div class="lane-header">
+        <div class="swatch" style="background:{{ lane.worker.color_hex }};"></div>{{ lane.worker.name if col_header_full_name else lane.worker.name[0] }}{% if lane.on_leave %} <span class="leave-icon" title="{{ lane.worker.name }} is on leave">&#127796;</span>{% endif %}
+      </div>
+      <div class="lane-body {% if lane.on_leave %}on-leave{% endif %}" data-day="{{ col_date.isoformat() }}" data-worker-id="{{ lane.worker.id }}" data-start-hour="{{ start_hour }}" data-on-leave="{{ 'true' if lane.on_leave else 'false' }}" title="{% if lane.on_leave %}{{ lane.worker.name }} is on leave — can't be scheduled{% endif %}" style="height:{{ col_lane_height }}px;">
+        {% if lane.on_leave and not lane.blocks %}
+        <div class="lane-away-label">On leave</div>
+        {% endif %}
+        {% for b in lane.blocks %}
+        {% set is_locked = b.job.status.name == 'Booked with Customer' %}
+        <div class="job-block {% if b.linked %}linked{% endif %} {% if b.job.status.name == 'Cancelled' %}cancelled{% endif %} {% if is_locked %}locked{% endif %} {% if lane.on_leave %}leave-conflict{% endif %}"
+             draggable="{{ 'false' if (is_locked or not user) else 'true' }}" data-job-id="{{ b.job.id }}" data-duration-min="{{ b.duration_min }}"
+             data-start-time="{{ b.job.start_time.strftime('%H:%M') }}" data-end-time="{{ b.job.end_time.strftime('%H:%M') }}"
+             data-open-url="{{ col_open_url_base }}&job={{ b.job.id }}"
+             title="{% if lane.on_leave %}{{ lane.worker.name }} is on leave this day — resolve this clash{% elif is_locked %}Booked with customer — double-click to edit, then re-sync the booking{% endif %}"
+             style="top:{{ b.top }}px; height:{{ b.height }}px; background:{{ lane.worker.color_hex }}22; border-left-color:{{ b.job.status.color_hex }};">
+          <div class="num mono">#{{ b.job.job_number }}{% if lane.on_leave %} &#9888;{% endif %}{% if is_locked %} &#128274;{% endif %}</div>
+          <div class="cust">{{ b.job.customer_name }}</div>
+          <div class="time mono">{{ b.time_label }}{% if b.other_workers %} · w/ {{ b.other_workers|join(", ") }}{% endif %}</div>
+          {% if b.short %}
+            <div class="status-dot" style="background:{{ b.job.status.color_hex }};"></div>
+          {% else %}
+            <div class="status" style="color:{{ b.job.status.color_hex }};">{{ b.job.status.name }}</div>
+          {% endif %}
+          {% if not b.short and not is_locked and user %}
+          <div class="duration-stepper">
+            <button class="dur-btn dur-up" data-job-id="{{ b.job.id }}" title="Extend by 15 min">&#9650;</button>
+            <button class="dur-btn dur-down" data-job-id="{{ b.job.id }}" title="Shorten by 15 min">&#9660;</button>
+          </div>
+          {% endif %}
+          {% if not is_locked and user %}
+          <div class="resize-handle" draggable="false"></div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="lane"><div class="lane-body empty-day" data-day="{{ col_date.isoformat() }}" style="height:{{ col_lane_height }}px;">{% if user %}No jobs — drop here to schedule{% else %}No jobs scheduled{% endif %}</div></div>
+  {% endif %}
+</div>

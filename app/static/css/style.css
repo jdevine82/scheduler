@@ -77,6 +77,19 @@ a{color:var(--accent-bright);}
 .dur-btn:hover{background:rgba(255,255,255,0.95); color:var(--text-primary);}
 .lane-body.drag-over, .month-cell.drag-over{background:var(--bg-hover);}
 
+/* ---- Worker leave / holidays ---- */
+.lane.on-leave .lane-header{color:var(--text-muted);}
+.lane-body.on-leave{
+  background-image:repeating-linear-gradient(45deg, var(--bg-elevated), var(--bg-elevated) 8px, var(--bg-hover) 8px, var(--bg-hover) 16px);
+  cursor:not-allowed;
+}
+.lane-away-label{position:absolute; top:8px; left:0; right:0; text-align:center; font-size:10.5px; color:var(--text-muted); font-weight:600;}
+.leave-icon{font-size:9px;}
+.job-block.leave-conflict, .month-block.leave-conflict{outline:2px solid var(--status-urgent); outline-offset:-2px;}
+.leave-badge{font-size:9.5px; color:var(--status-hold); background:rgba(180,83,9,0.10); border-radius:3px; padding:1px 5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.chip-tag.on-leave{opacity:0.7;}
+.chip-tag.on-leave:has(input:disabled){background:var(--bg-hover);}
+
 .legend{height:44px; display:flex; align-items:center; gap:18px; padding:0 20px; border-top:1px solid var(--border); background:var(--bg-panel); flex-wrap:wrap;}
 .legend .item{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary);}
 .legend .dot{width:9px; height:9px; border-radius:50%;}

@@ -1,0 +1,58 @@
+{% extends "settings/_base.html" %}
+{% block settings_content %}
+{% if error == "daterange" %}
+<div class="flash error">Finish date can't be before the start date.</div>
+{% endif %}
+<div class="card">
+  <h2>Holidays</h2>
+  {% if leave_periods %}
+  <table class="data-table">
+    <tr><th>Worker</th><th>Start</th><th>Finish</th><th>Reason</th><th></th></tr>
+    {% for lv in leave_periods %}
+    <tr>
+      <td><span class="badge"><span class="dot" style="background:{{ lv.worker.color_hex }};"></span>{{ lv.worker.name }}</span></td>
+      <td>{{ lv.start_date.strftime("%d %b %Y") }}</td>
+      <td>{{ lv.end_date.strftime("%d %b %Y") }}</td>
+      <td style="color:var(--text-secondary);">{{ lv.reason or "—" }}</td>
+      <td>
+        <form method="post" action="/settings/holidays/{{ lv.id }}/delete" style="margin:0;">
+          <button class="btn-danger-text" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="empty" style="color:var(--text-muted); font-size:12.5px;">No holidays on file yet — add one below.</div>
+  {% endif %}
+</div>
+<div class="card">
+  <h2>Add holiday</h2>
+  <form method="post" action="/settings/holidays" class="form-row">
+    <div class="field-group">
+      <label for="worker_id">Worker</label>
+      <select class="plain" id="worker_id" name="worker_id" required>
+        {% for w in workers %}
+        <option value="{{ w.id }}">{{ w.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field-group">
+      <label for="start_date">Start</label>
+      <input class="select-input" type="date" id="start_date" name="start_date" required>
+    </div>
+    <div class="field-group">
+      <label for="end_date">Finish</label>
+      <input class="select-input" type="date" id="end_date" name="end_date" required>
+    </div>
+    <div class="field-group">
+      <label for="reason">Reason (optional)</label>
+      <input class="plain" type="text" id="reason" name="reason" placeholder="Annual leave">
+    </div>
+    <button class="btn btn-primary" type="submit">Add</button>
+  </form>
+  <div class="subtitle" style="margin-top:10px; margin-bottom:0;">
+    Workers can't be scheduled or assigned to a job on any day within a holiday period.
+  </div>
+</div>
+{% endblock %}

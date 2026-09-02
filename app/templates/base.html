@@ -36,6 +36,8 @@
       {% if user.is_admin %}<a class="gear" href="/settings" title="Settings">&#9881;</a>{% endif %}
       <form method="post" action="/logout"><button class="linklike" type="submit">Log out</button></form>
     </div>
+    {% else %}
+    <a class="btn btn-outline btn-sm" href="/login">Log in</a>
     {% endif %}
   </div>
 </div>
@@ -72,7 +74,7 @@
 <div class="flash success" style="margin:14px 20px 0 20px;">Already in sync with ServiceM8.</div>
 {% endif %}
 
-{% if view %}
+{% if view and user %}
 <div class="overlay" id="print-dialog-overlay" style="display:none;">
   <div class="modal" style="width:380px;">
     <div class="modal-head">

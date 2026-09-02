@@ -32,6 +32,24 @@
   </div>
   {% endif %}
 </div>
+<div class="card">
+  <h2>Completion queue</h2>
+  <form method="post" action="/settings/queues/completion" class="form-row">
+    <div class="field-group">
+      <label for="completion_queue_uuid">Queue</label>
+      <select class="plain" id="completion_queue_uuid" name="completion_queue_uuid" style="width:220px;">
+        <option value="">— none —</option>
+        {% for q in queues %}
+        <option value="{{ q.servicem8_queue_uuid }}" {% if q.servicem8_queue_uuid == completion_queue_uuid %}selected{% endif %}>{{ q.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </form>
+  <div class="subtitle" style="margin-top:10px; margin-bottom:0;">
+    When a scheduled job moves into this queue in ServiceM8, its status here is automatically set to Completed during sync — even if it was previously Booked with Customer.
+  </div>
+</div>
 <div class="card" style="display:flex; gap:10px;">
   <form method="post" action="/settings/queues/refresh" style="margin:0;">
     <button class="btn btn-outline" type="submit">Refresh queue list from ServiceM8</button>

@@ -9,10 +9,17 @@ from sqlalchemy.orm import Session, selectinload
 from app import sync as servicem8_sync
 from app.config import WEEK_VIEW_END_HOUR, WEEK_VIEW_START_HOUR
 from app.database import get_db
-from app.deps import get_current_user
-from app.models import Job, JobAssignment, Queue, Status, User, Worker
+from app.deps import get_current_user, get_current_user_optional
+from app.models import Job, JobAssignment, Queue, Status, User, Worker, WorkerLeave
 from app.routers.settings import get_setting
-from app.scheduling import build_day_lanes, hour_labels, week_start
+from app.scheduling import (
+    build_day_lanes,
+    hour_labels,
+    leave_worker_ids_by_day,
+    leave_worker_ids_for_day,
+    week_label,
+    week_start,
+)
 from app.templating import templates
 
 logger = logging.getLogger(__name__)
@@ -23,7 +30,7 @@ WORKER_LEGEND_COLORS_NOTE = "Lane = who · left stripe = status · fill = worker
 
 
 @router.get("/")
-def root(user: User = Depends(get_current_user)):
+def root():
     return RedirectResponse("/week")
 
 
@@ -38,7 +45,8 @@ def sync_now(
     if not api_key:
         return RedirectResponse(f"{return_to}{separator}synced=nokey", status_code=303)
     try:
-        servicem8_sync.sync_jobs(db, api_key)
+        completion_queue_uuid = get_setting(db, "completion_queue_uuid")
+        servicem8_sync.sync_jobs(db, api_key, completion_queue_uuid)
         booking_summary = servicem8_sync.resync_all_bookings(db, api_key)
         if booking_summary["cancelled"]:
             return RedirectResponse(
@@ -67,7 +75,8 @@ def week_view(
     request: Request,
     start: str | None = None,
     job: int | None = None,
-    user: User = Depends(get_current_user),
+    leave_conflict: str | None = None,
+    user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
     if start:
@@ -77,13 +86,16 @@ def week_view(
     monday = week_start(anchor)
     days = [monday + datetime.timedelta(days=i) for i in range(7)]
 
+    workers = db.query(Worker).filter(Worker.active.is_(True)).order_by(Worker.id).all()
+    leave_by_day = leave_worker_ids_by_day(db, days)
+
     day_data = []
     for d in days:
-        lanes, lane_height = build_day_lanes(db, d)
+        lanes, lane_height = build_day_lanes(db, d, active_workers=workers, leave_ids=leave_by_day[d])
         day_data.append({"date": d, "lanes": lanes, "lane_height": lane_height})
 
-    workers = db.query(Worker).filter(Worker.active.is_(True)).order_by(Worker.id).all()
     statuses = db.query(Status).order_by(Status.sort_order).all()
+    open_job = db.get(Job, job) if job else None
 
     ctx = {
         "request": request,
@@ -91,19 +103,64 @@ def week_view(
         "view": "week",
         "hours": hour_labels(),
         "days": day_data,
-        "week_label": f"{monday.strftime('%d %b')} – {(monday + datetime.timedelta(days=6)).strftime('%d %b %Y')}",
+        "week_label": week_label(monday),
         "prev_week": (monday - datetime.timedelta(days=7)).isoformat(),
         "next_week": (monday + datetime.timedelta(days=7)).isoformat(),
         "today": datetime.date.today(),
         "workers": workers,
         "statuses": statuses,
-        "open_job": db.get(Job, job) if job else None,
+        "open_job": open_job,
+        "leave_conflict": leave_conflict,
+        "leave_worker_ids": leave_worker_ids_for_day(db, open_job.day) if open_job and open_job.day else set(),
         "start_hour": WEEK_VIEW_START_HOUR,
         "end_hour": WEEK_VIEW_END_HOUR,
         "print_default_date": monday.isoformat(),
     }
-    ctx.update(_sidebar_context(db))
+    if user:
+        ctx.update(_sidebar_context(db))
     return templates.TemplateResponse(request, "week.html", ctx)
+
+
+@router.get("/day")
+def day_view(
+    request: Request,
+    date: str | None = None,
+    job: int | None = None,
+    leave_conflict: str | None = None,
+    user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    d = datetime.date.fromisoformat(date) if date else datetime.date.today()
+    workers = db.query(Worker).filter(Worker.active.is_(True)).order_by(Worker.id).all()
+    lanes, lane_height = build_day_lanes(db, d, active_workers=workers)
+
+    statuses = db.query(Status).order_by(Status.sort_order).all()
+    open_job = db.get(Job, job) if job else None
+
+    ctx = {
+        "request": request,
+        "user": user,
+        "view": "day",
+        "hours": hour_labels(),
+        "date": d,
+        "lanes": lanes,
+        "lane_height": lane_height,
+        "day_label": d.strftime("%A %d %b %Y"),
+        "prev_day": (d - datetime.timedelta(days=1)).isoformat(),
+        "next_day": (d + datetime.timedelta(days=1)).isoformat(),
+        "today": datetime.date.today(),
+        "workers": workers,
+        "statuses": statuses,
+        "open_job": open_job,
+        "leave_conflict": leave_conflict,
+        "leave_worker_ids": leave_worker_ids_for_day(db, open_job.day) if open_job and open_job.day else set(),
+        "start_hour": WEEK_VIEW_START_HOUR,
+        "end_hour": WEEK_VIEW_END_HOUR,
+        "print_default_date": d.isoformat(),
+    }
+    if user:
+        ctx.update(_sidebar_context(db))
+    return templates.TemplateResponse(request, "day.html", ctx)
 
 
 @router.get("/print/day")
@@ -118,7 +175,8 @@ def print_day(
     just the day's worker columns, suitable for printing or browser print-to-PDF.
     Optionally filtered down to a single worker."""
     day = datetime.date.fromisoformat(date)
-    lanes, lane_height = build_day_lanes(db, day)
+    workers = db.query(Worker).filter(Worker.active.is_(True)).order_by(Worker.id).all()
+    lanes, lane_height = build_day_lanes(db, day, active_workers=workers)
     if worker:
         lanes = [lane for lane in lanes if lane["worker"].id == worker]
     statuses = db.query(Status).order_by(Status.sort_order).all()
@@ -154,11 +212,13 @@ def print_week(
     days = [monday + datetime.timedelta(days=i) for i in range(7)]
 
     worker_obj = db.get(Worker, worker) if worker else None
+    active_workers = db.query(Worker).filter(Worker.active.is_(True)).order_by(Worker.id).all()
+    leave_by_day = leave_worker_ids_by_day(db, days)
 
     day_data = []
     job_ids: set[int] = set()
     for d in days:
-        lanes, lane_height = build_day_lanes(db, d)
+        lanes, lane_height = build_day_lanes(db, d, active_workers=active_workers, leave_ids=leave_by_day[d])
         if worker:
             lanes = [lane for lane in lanes if lane["worker"].id == worker]
         for lane in lanes:
@@ -174,7 +234,7 @@ def print_week(
         "today": datetime.date.today(),
         "hours": hour_labels(),
         "statuses": statuses,
-        "week_label": f"{monday.strftime('%d %b')} – {(monday + datetime.timedelta(days=6)).strftime('%d %b %Y')}",
+        "week_label": week_label(monday),
         "worker_filter": worker_obj,
         "job_count": len(job_ids),
     }
@@ -187,7 +247,8 @@ def month_view(
     year: int | None = None,
     month: int | None = None,
     job: int | None = None,
-    user: User = Depends(get_current_user),
+    leave_conflict: str | None = None,
+    user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
     today = datetime.date.today()
@@ -212,11 +273,28 @@ def month_view(
     for j in jobs:
         jobs_by_day.setdefault(j.day, []).append(j)
 
+    leave_by_day: dict[datetime.date, list[Worker]] = {}
+    leave_rows = (
+        db.query(WorkerLeave)
+        .join(Worker)
+        .filter(
+            WorkerLeave.start_date <= all_dates[-1],
+            WorkerLeave.end_date >= all_dates[0],
+            Worker.active.is_(True),
+        )
+        .all()
+    )
+    for lv in leave_rows:
+        for d in all_dates:
+            if lv.start_date <= d <= lv.end_date:
+                leave_by_day.setdefault(d, []).append(lv.worker)
+
     prev_month = (datetime.date(year, month, 1) - datetime.timedelta(days=1))
     next_month = (datetime.date(year, month, 28) + datetime.timedelta(days=7)).replace(day=1)
 
     workers = db.query(Worker).filter(Worker.active.is_(True)).order_by(Worker.id).all()
     statuses = db.query(Status).order_by(Status.sort_order).all()
+    open_job = db.get(Job, job) if job else None
 
     ctx = {
         "request": request,
@@ -224,6 +302,7 @@ def month_view(
         "view": "month",
         "weeks": weeks,
         "jobs_by_day": jobs_by_day,
+        "leave_by_day": leave_by_day,
         "month_label": datetime.date(year, month, 1).strftime("%B %Y"),
         "current_month": month,
         "current_year": year,
@@ -234,8 +313,11 @@ def month_view(
         "next_month": next_month.month,
         "workers": workers,
         "statuses": statuses,
-        "open_job": db.get(Job, job) if job else None,
+        "open_job": open_job,
+        "leave_conflict": leave_conflict,
+        "leave_worker_ids": leave_worker_ids_for_day(db, open_job.day) if open_job and open_job.day else set(),
         "print_default_date": (today if today.year == year and today.month == month else datetime.date(year, month, 1)).isoformat(),
     }
-    ctx.update(_sidebar_context(db))
+    if user:
+        ctx.update(_sidebar_context(db))
     return templates.TemplateResponse(request, "month.html", ctx)

@@ -37,7 +37,7 @@
           <button class="btn btn-outline btn-sm" type="submit">{% if w.active %}Deactivate{% else %}Reactivate{% endif %}</button>
         </form>
         <form method="post" action="/settings/workers/{{ w.id }}/delete" style="margin:0;"
-              onsubmit="return confirm(&quot;Delete this worker permanently? This also removes them from any jobs they're assigned to. This can't be undone.&quot;);">
+              onsubmit="return confirm(&quot;Delete this worker permanently? This also removes them from any jobs they're assigned to and any holidays on file for them. This can't be undone.&quot;);">
           <button class="btn-danger-text" type="submit">Delete</button>
         </form>
       </td>
