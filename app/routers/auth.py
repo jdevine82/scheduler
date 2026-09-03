@@ -13,9 +13,16 @@ router = APIRouter()
 
 
 @router.get("/login")
-def login_form(request: Request):
-    if request.session.get("user_id"):
-        return RedirectResponse("/", status_code=303)
+def login_form(request: Request, db: Session = Depends(get_db)):
+    user_id = request.session.get("user_id")
+    if user_id:
+        user = db.get(User, user_id)
+        if user is not None and user.active:
+            return RedirectResponse("/", status_code=303)
+        # Stale session (e.g. pointing at a user_id from a since-recreated
+        # database) — clear it instead of bouncing back to "/" forever,
+        # which would never let the login form actually render.
+        request.session.clear()
     return templates.TemplateResponse(request, "login.html", {"error": None})
 
 
