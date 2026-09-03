@@ -10,11 +10,13 @@ from app import sync as servicem8_sync
 from app.config import WEEK_VIEW_END_HOUR, WEEK_VIEW_START_HOUR
 from app.database import get_db
 from app.deps import get_current_user, get_current_user_optional
-from app.models import Job, JobAssignment, Queue, Status, User, Worker, WorkerLeave
+from app.models import Job, JobDay, JobDayAssignment, Queue, Status, User, Worker, WorkerLeave
 from app.routers.settings import get_setting
 from app.scheduling import (
     build_day_lanes,
+    day_position,
     hour_labels,
+    job_day_positions,
     leave_worker_ids_by_day,
     leave_worker_ids_for_day,
     week_label,
@@ -63,10 +65,24 @@ def _sidebar_context(db: Session):
     # every unscheduled job is rendered once and instantly shown/hidden, no
     # reload needed to switch queues.
     queues = db.query(Queue).filter(Queue.watched.is_(True)).order_by(Queue.name).all()
-    unscheduled_jobs = db.query(Job).filter(Job.day.is_(None)).order_by(Job.created_at.desc()).all()
+    unscheduled_jobs = db.query(Job).filter(~Job.days.any()).order_by(Job.created_at.desc()).all()
     return {
         "queues": queues,
         "unscheduled_jobs": unscheduled_jobs,
+    }
+
+
+def _open_job_context(db: Session, job: int | None, day: int | None) -> dict:
+    """Resolve the job/job-day the modal should open for. A block's URL
+    always carries its own job_day_id (`day`), which is authoritative and
+    unambiguous even for a multi-day job; `job` alone is a defensive
+    fallback for links that don't specify a day."""
+    open_job_day = db.get(JobDay, day) if day else None
+    open_job = open_job_day.job if open_job_day else (db.get(Job, job) if job else None)
+    return {
+        "open_job": open_job,
+        "open_job_day": open_job_day,
+        "leave_worker_ids": leave_worker_ids_for_day(db, open_job_day.day) if open_job_day else set(),
     }
 
 
@@ -75,6 +91,7 @@ def week_view(
     request: Request,
     start: str | None = None,
     job: int | None = None,
+    day: int | None = None,
     leave_conflict: str | None = None,
     user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
@@ -95,7 +112,6 @@ def week_view(
         day_data.append({"date": d, "lanes": lanes, "lane_height": lane_height})
 
     statuses = db.query(Status).order_by(Status.sort_order).all()
-    open_job = db.get(Job, job) if job else None
 
     ctx = {
         "request": request,
@@ -109,13 +125,12 @@ def week_view(
         "today": datetime.date.today(),
         "workers": workers,
         "statuses": statuses,
-        "open_job": open_job,
         "leave_conflict": leave_conflict,
-        "leave_worker_ids": leave_worker_ids_for_day(db, open_job.day) if open_job and open_job.day else set(),
         "start_hour": WEEK_VIEW_START_HOUR,
         "end_hour": WEEK_VIEW_END_HOUR,
         "print_default_date": monday.isoformat(),
     }
+    ctx.update(_open_job_context(db, job, day))
     if user:
         ctx.update(_sidebar_context(db))
     return templates.TemplateResponse(request, "week.html", ctx)
@@ -126,6 +141,7 @@ def day_view(
     request: Request,
     date: str | None = None,
     job: int | None = None,
+    day: int | None = None,
     leave_conflict: str | None = None,
     user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
@@ -135,7 +151,6 @@ def day_view(
     lanes, lane_height = build_day_lanes(db, d, active_workers=workers)
 
     statuses = db.query(Status).order_by(Status.sort_order).all()
-    open_job = db.get(Job, job) if job else None
 
     ctx = {
         "request": request,
@@ -151,13 +166,12 @@ def day_view(
         "today": datetime.date.today(),
         "workers": workers,
         "statuses": statuses,
-        "open_job": open_job,
         "leave_conflict": leave_conflict,
-        "leave_worker_ids": leave_worker_ids_for_day(db, open_job.day) if open_job and open_job.day else set(),
         "start_hour": WEEK_VIEW_START_HOUR,
         "end_hour": WEEK_VIEW_END_HOUR,
         "print_default_date": d.isoformat(),
     }
+    ctx.update(_open_job_context(db, job, day))
     if user:
         ctx.update(_sidebar_context(db))
     return templates.TemplateResponse(request, "day.html", ctx)
@@ -247,6 +261,7 @@ def month_view(
     year: int | None = None,
     month: int | None = None,
     job: int | None = None,
+    day: int | None = None,
     leave_conflict: str | None = None,
     user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
@@ -258,20 +273,22 @@ def month_view(
     cal = pycalendar.Calendar(firstweekday=0)
     weeks = cal.monthdatescalendar(year, month)
 
-    jobs_by_day: dict[datetime.date, list[Job]] = {}
+    jobs_by_day: dict[datetime.date, list[JobDay]] = {}
     all_dates = [d for week in weeks for d in week]
-    jobs = (
-        db.query(Job)
+    job_days = (
+        db.query(JobDay)
         .options(
-            selectinload(Job.assignments).selectinload(JobAssignment.worker),
-            selectinload(Job.status),
+            selectinload(JobDay.assignments).selectinload(JobDayAssignment.worker),
+            selectinload(JobDay.job).selectinload(Job.status),
         )
-        .filter(Job.day.in_(all_dates))
-        .order_by(Job.start_time.is_(None), Job.start_time)
+        .filter(JobDay.day.in_(all_dates))
+        .order_by(JobDay.start_time.is_(None), JobDay.start_time)
         .all()
     )
-    for j in jobs:
-        jobs_by_day.setdefault(j.day, []).append(j)
+    positions = job_day_positions(db, {jd.job_id for jd in job_days})
+    day_badge_by_job_day_id = {jd.id: day_position(positions, jd.job_id, jd.day) for jd in job_days}
+    for jd in job_days:
+        jobs_by_day.setdefault(jd.day, []).append(jd)
 
     leave_by_day: dict[datetime.date, list[Worker]] = {}
     leave_rows = (
@@ -294,7 +311,6 @@ def month_view(
 
     workers = db.query(Worker).filter(Worker.active.is_(True)).order_by(Worker.id).all()
     statuses = db.query(Status).order_by(Status.sort_order).all()
-    open_job = db.get(Job, job) if job else None
 
     ctx = {
         "request": request,
@@ -302,6 +318,7 @@ def month_view(
         "view": "month",
         "weeks": weeks,
         "jobs_by_day": jobs_by_day,
+        "day_badge_by_job_day_id": day_badge_by_job_day_id,
         "leave_by_day": leave_by_day,
         "month_label": datetime.date(year, month, 1).strftime("%B %Y"),
         "current_month": month,
@@ -313,11 +330,10 @@ def month_view(
         "next_month": next_month.month,
         "workers": workers,
         "statuses": statuses,
-        "open_job": open_job,
         "leave_conflict": leave_conflict,
-        "leave_worker_ids": leave_worker_ids_for_day(db, open_job.day) if open_job and open_job.day else set(),
         "print_default_date": (today if today.year == year and today.month == month else datetime.date(year, month, 1)).isoformat(),
     }
+    ctx.update(_open_job_context(db, job, day))
     if user:
         ctx.update(_sidebar_context(db))
     return templates.TemplateResponse(request, "month.html", ctx)

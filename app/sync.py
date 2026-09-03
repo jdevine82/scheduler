@@ -1,9 +1,10 @@
 """ServiceM8 sync: pulls queues + unscheduled jobs into the local DB (spec §3).
 
 Sync rules:
-- New jobs in a watched queue are added locally as unscheduled (day=None).
-- Jobs already known locally never have their day/time/status/assignments
-  touched by sync — only ServiceM8-sourced fields (customer, description) refresh.
+- New jobs in a watched queue are added locally as unscheduled (no JobDay rows).
+- Jobs already known locally never have their scheduling (JobDay rows,
+  status, assignments) touched by sync — only ServiceM8-sourced fields
+  (customer, description) refresh.
 - Jobs that disappear from all watched queues are flagged, not deleted.
 """
 
@@ -13,7 +14,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from app import servicem8
-from app.models import Job, Queue, Status
+from app.models import Job, JobDay, Queue, Status
 
 logger = logging.getLogger(__name__)
 
@@ -138,57 +139,64 @@ def sync_jobs(db: Session, api_key: str, completion_queue_uuid: str | None = Non
     return {"added": added, "updated": updated, "flagged": flagged, "unflagged": unflagged, "completed": completed}
 
 
-def reconcile_booking(db: Session, api_key: str, job: Job) -> str:
-    """Pull one job's real booking state from ServiceM8 and reconcile locally:
-    - gone/deactivated there -> unlock locally and set status to Cancelled.
+def reconcile_booking(db: Session, api_key: str, job_day: JobDay) -> str:
+    """Pull one day's real booking state from ServiceM8 and reconcile locally:
+    - gone/deactivated there -> unlock locally and set the job's status to Cancelled.
     - still there but a different date/time -> adopt ServiceM8's date/time, stay locked.
     - matches -> just refresh the synced timestamp.
 
     Returns 'cancelled' | 'updated' | 'insync'. Caller is responsible for
     committing and for touching last_modified (only meaningful for a manual,
     user-triggered re-sync — not the bulk/background case)."""
-    activity = servicem8.fetch_activity(api_key, job.servicem8_activity_uuid)
+    activity = servicem8.fetch_activity(api_key, job_day.servicem8_activity_uuid)
 
     if activity is None:
-        job.servicem8_booked = False
-        job.servicem8_activity_uuid = None
+        job_day.servicem8_booked = False
+        job_day.servicem8_activity_uuid = None
         cancelled_status = db.query(Status).filter(Status.name == CANCELLED_STATUS_NAME).first()
         if cancelled_status:
-            job.status_id = cancelled_status.id
+            job_day.job.status_id = cancelled_status.id
         return "cancelled"
 
     sm8_start = datetime.datetime.strptime(activity["start_date"], "%Y-%m-%d %H:%M:%S")
     sm8_end = datetime.datetime.strptime(activity["end_date"], "%Y-%m-%d %H:%M:%S")
 
     changed = (
-        job.day != sm8_start.date() or job.start_time != sm8_start.time() or job.end_time != sm8_end.time()
+        job_day.day != sm8_start.date()
+        or job_day.start_time != sm8_start.time()
+        or job_day.end_time != sm8_end.time()
     )
     if changed:
-        job.day = sm8_start.date()
-        job.start_time = sm8_start.time()
-        job.end_time = sm8_end.time()
+        job_day.day = sm8_start.date()
+        job_day.start_time = sm8_start.time()
+        job_day.end_time = sm8_end.time()
 
-    job.servicem8_last_synced_at = datetime.datetime.utcnow()
+    job_day.servicem8_last_synced_at = datetime.datetime.utcnow()
     return "updated" if changed else "insync"
 
 
 def resync_all_bookings(db: Session, api_key: str) -> dict:
-    """Re-check every locally-booked job against ServiceM8 — used by the
+    """Re-check every locally-booked day against ServiceM8 — used by the
     top-bar Sync Now button so a booking removed or moved in ServiceM8 gets
     caught without having to open each job individually."""
-    booked_jobs = (
-        db.query(Job)
-        .filter(Job.servicem8_booked.is_(True), Job.servicem8_activity_uuid.isnot(None), Job.is_manual.is_(False))
+    booked_days = (
+        db.query(JobDay)
+        .join(Job)
+        .filter(
+            JobDay.servicem8_booked.is_(True),
+            JobDay.servicem8_activity_uuid.isnot(None),
+            Job.is_manual.is_(False),
+        )
         .all()
     )
     updated = 0
     cancelled = 0
     errors = 0
-    for job in booked_jobs:
+    for job_day in booked_days:
         try:
-            outcome = reconcile_booking(db, api_key, job)
+            outcome = reconcile_booking(db, api_key, job_day)
         except Exception:
-            logger.exception("Booking re-sync failed for job %s", job.id)
+            logger.exception("Booking re-sync failed for job %s day %s", job_day.job_id, job_day.id)
             errors += 1
             continue
         if outcome == "updated":
@@ -196,4 +204,4 @@ def resync_all_bookings(db: Session, api_key: str) -> dict:
         elif outcome == "cancelled":
             cancelled += 1
     db.commit()
-    return {"checked": len(booked_jobs), "updated": updated, "cancelled": cancelled, "errors": errors}
+    return {"checked": len(booked_days), "updated": updated, "cancelled": cancelled, "errors": errors}

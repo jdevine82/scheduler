@@ -1,8 +1,12 @@
 {% set j = open_job %}
+{% set jd = open_job_day %}
+{% set job_days_sorted = j.days | sort(attribute='day') %}
+{% set day_count = job_days_sorted | length %}
+{% set day_index = job_days_sorted.index(jd) + 1 if jd in job_days_sorted else 1 %}
 <div class="overlay" id="job-modal-overlay">
   <div class="modal">
     <div class="modal-head">
-      <div class="jobnum"><span class="mono">#{{ j.job_number }}</span>{{ j.customer_name }}</div>
+      <div class="jobnum"><span class="mono">#{{ j.job_number }}</span>{{ j.customer_name }}{% if day_count > 1 %} <span class="day-badge">Day {{ day_index }} of {{ day_count }}</span>{% endif %}</div>
       <a class="modal-close" href="{{ return_to }}">&#10005;</a>
     </div>
 
@@ -19,7 +23,7 @@
       <div class="field-group">
         <div class="field-label">Assigned workers</div>
         <div class="worker-chips">
-          {% for a in j.assignments %}
+          {% for a in jd.assignments %}
           <div class="chip-tag"><span class="swatch" style="background:{{ a.worker.color_hex }};"></span>{{ a.worker.name }}</div>
           {% else %}
           <div style="color:var(--text-muted); font-size:12px;">Unassigned</div>
@@ -29,10 +33,10 @@
       <div class="field-group">
         <div class="field-label">Scheduled</div>
         <div class="readonly-box">
-          {% if j.day %}{{ j.day.strftime("%A %d %b %Y") }}{% if j.start_time and j.end_time %} · {{ j.start_time.strftime("%-I:%M %p") }}–{{ j.end_time.strftime("%-I:%M %p") }}{% endif %}{% else %}Not yet scheduled{% endif %}
+          {{ jd.day.strftime("%A %d %b %Y") }}{% if jd.start_time and jd.end_time %} · {{ jd.start_time.strftime("%-I:%M %p") }}–{{ jd.end_time.strftime("%-I:%M %p") }}{% endif %}
         </div>
       </div>
-      {% if j.servicem8_booked %}
+      {% if jd.servicem8_booked %}
       <div class="field-group">
         <div class="field-label">ServiceM8 booking</div>
         <div class="sm8-status"><div class="left"><div class="check">&#10003;</div>Booked in ServiceM8</div></div>
@@ -44,7 +48,7 @@
       <a class="btn btn-outline" href="{{ return_to }}">Close</a>
     </div>
     {% else %}
-    <form method="post" action="/jobs/{{ j.id }}">
+    <form method="post" action="/jobs/{{ j.id }}/days/{{ jd.id }}">
       <input type="hidden" name="return_to" value="{{ return_to }}">
       <div class="modal-body">
         {% if j.flagged_missing_from_queue %}
@@ -79,7 +83,7 @@
         </div>
 
         <div class="field-group">
-          <div class="field-label">Assigned workers</div>
+          <div class="field-label">Assigned workers{% if day_count > 1 %} — day {{ day_index }} of {{ day_count }}{% endif %}</div>
           <div class="worker-chips">
             {% for w in all_workers %}
             {% set w_on_leave = w.id in leave_worker_ids %}
@@ -99,14 +103,14 @@
 
         <div class="field-group">
           <div class="field-label">Day</div>
-          <input class="select-input" type="date" name="day" value="{{ j.day.isoformat() if j.day else '' }}">
+          <input class="select-input" type="date" name="day" value="{{ jd.day.isoformat() }}" required>
         </div>
 
-        {% set current_duration = j.start_time|duration_minutes(j.end_time) %}
+        {% set current_duration = jd.start_time|duration_minutes(jd.end_time) %}
         <div class="row-2">
           <div class="field-group">
             <div class="field-label">Start time</div>
-            <input class="time-input mono" type="time" name="start_time" id="job-start-time" value="{{ j.start_time.strftime('%H:%M') if j.start_time else '' }}">
+            <input class="time-input mono" type="time" name="start_time" id="job-start-time" value="{{ jd.start_time.strftime('%H:%M') if jd.start_time else '' }}">
           </div>
           <div class="field-group">
             <div class="field-label">Duration</div>
@@ -128,7 +132,7 @@
         <div class="field-group" id="job-end-time-group">
           <div class="field-label">Finish time</div>
           <input class="time-input mono" type="time" name="end_time" id="job-end-time" readonly
-                 value="{{ j.end_time.strftime('%H:%M') if j.end_time else '' }}">
+                 value="{{ jd.end_time.strftime('%H:%M') if jd.end_time else '' }}">
           <div style="font-size:10.5px; color:var(--text-muted);">Set from start time + duration — pick "Custom…" above to enter it directly.</div>
         </div>
         <script>
@@ -137,25 +141,25 @@
           });
         </script>
 
-        {% set is_scheduled = j.day and j.start_time and j.end_time %}
+        {% set is_scheduled = jd.start_time and jd.end_time %}
         <div class="field-group">
-          <div class="field-label">ServiceM8 booking</div>
+          <div class="field-label">ServiceM8 booking{% if day_count > 1 %} — this day only{% endif %}</div>
           {% if j.is_manual %}
           <div class="sm8-status not-booked">
             <div class="left" style="color:var(--text-muted);">Manual task — not linked to ServiceM8, so it can't be booked there.</div>
           </div>
-          {% elif j.servicem8_booked %}
+          {% elif jd.servicem8_booked %}
           <div class="sm8-status">
-            <div class="left"><div class="check">&#10003;</div>Booked in ServiceM8 {% if j.servicem8_last_synced_at %}&middot; synced {{ j.servicem8_last_synced_at|relative_time }}{% endif %}</div>
-            <button class="link-btn" type="submit" formaction="/jobs/{{ j.id }}/resync-booking"
-                    onclick="return confirm(&quot;Check ServiceM8 for this booking's current date/time? If it was removed there, this job will be unlocked and marked Cancelled. If the date/time changed there, the calendar will be updated to match.&quot;);">Re-sync booking</button>
+            <div class="left"><div class="check">&#10003;</div>Booked in ServiceM8 {% if jd.servicem8_last_synced_at %}&middot; synced {{ jd.servicem8_last_synced_at|relative_time }}{% endif %}</div>
+            <button class="link-btn" type="submit" formaction="/jobs/{{ j.id }}/days/{{ jd.id }}/resync-booking"
+                    onclick="return confirm(&quot;Check ServiceM8 for this day's booking's current date/time? If it was removed there, this job will be unlocked and marked Cancelled. If the date/time changed there, the calendar will be updated to match.&quot;);">Re-sync booking</button>
           </div>
           {% else %}
           <div class="sm8-status not-booked">
-            <div class="left" style="color:var(--text-muted);">{% if is_scheduled %}Not booked in ServiceM8 yet{% else %}Set a day and time first{% endif %}</div>
-            <button class="btn btn-outline btn-sm" type="submit" formaction="/jobs/{{ j.id }}/book-in-servicem8"
+            <div class="left" style="color:var(--text-muted);">{% if is_scheduled %}Not booked in ServiceM8 yet{% else %}Set a start and finish time first{% endif %}</div>
+            <button class="btn btn-outline btn-sm" type="submit" formaction="/jobs/{{ j.id }}/days/{{ jd.id }}/book-in-servicem8"
                     {% if not is_scheduled %}disabled{% endif %}
-                    onclick="return confirm('Book this job into ServiceM8 for {{ j.day.strftime('%d %b %Y') if j.day else '' }}? This also sets its status to Booked with Customer.');">Book in ServiceM8</button>
+                    onclick="return confirm('Book this day into ServiceM8 for {{ jd.day.strftime('%d %b %Y') }}? This also sets the job\'s status to Booked with Customer.');">Book in ServiceM8</button>
           </div>
           {% endif %}
         </div>
@@ -166,7 +170,10 @@
       </div>
 
       <div class="modal-foot">
-        <button class="btn-danger-text" type="submit" formaction="/jobs/{{ j.id }}/delete">Delete job</button>
+        <div style="display:flex; gap:14px;">
+          <button class="btn-danger-text" type="submit" formaction="/jobs/{{ j.id }}/days/{{ jd.id }}/delete">Remove this day</button>
+          <button class="btn-danger-text" type="submit" formaction="/jobs/{{ j.id }}/delete">Delete job</button>
+        </div>
         <div style="display:flex; gap:8px;">
           <a class="btn btn-outline" href="{{ return_to }}">Cancel</a>
           <button class="btn btn-primary" type="submit">Save changes</button>

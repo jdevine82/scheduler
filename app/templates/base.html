@@ -18,6 +18,7 @@
   <div class="nav">
     {% block nav_extra %}{% endblock %}
     {% if user %}
+    <button type="button" id="copied-job-indicator" class="copied-indicator" style="display:none;" title="Click to cancel"></button>
     {% set clean_url = (request.url.path ~ '?' ~ request.url.query if request.url.query else request.url.path)|strip_query_param('synced')|strip_query_param('purged')|strip_query_param('unbooked') %}
     <form method="post" action="/sync-now" style="margin:0;">
       <input type="hidden" name="return_to" value="{{ clean_url }}">

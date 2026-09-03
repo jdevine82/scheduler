@@ -47,7 +47,7 @@ class Worker(Base):
     # stays local per spec §3, this doesn't drive it.
     servicem8_staff_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    assignments: Mapped[list["JobAssignment"]] = relationship(back_populates="worker")
+    assignments: Mapped[list["JobDayAssignment"]] = relationship(back_populates="worker")
     leave_periods: Mapped[list["WorkerLeave"]] = relationship(
         back_populates="worker", cascade="all, delete-orphan"
     )
@@ -105,14 +105,6 @@ class Job(Base):
     status_id: Mapped[int] = mapped_column(ForeignKey("statuses.id"))
     status: Mapped["Status"] = relationship(back_populates="jobs")
 
-    day: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
-    start_time: Mapped[datetime.time | None] = mapped_column(Time, nullable=True)
-    end_time: Mapped[datetime.time | None] = mapped_column(Time, nullable=True)
-
-    servicem8_booked: Mapped[bool] = mapped_column(Boolean, default=False)
-    servicem8_last_synced_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
-    servicem8_activity_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True)
-
     # Job moved out of a watched ServiceM8 queue since import — surfaced, not deleted.
     flagged_missing_from_queue: Mapped[bool] = mapped_column(Boolean, default=False)
 
@@ -123,20 +115,44 @@ class Job(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=now)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
-    assignments: Mapped[list["JobAssignment"]] = relationship(
-        back_populates="job", cascade="all, delete-orphan"
+    # Every day this job is scheduled on is a JobDay row — zero rows means
+    # unscheduled (sidebar), one is an ordinary single-day job, more than one
+    # is a multi-day job. No "primary day" special case anywhere: scheduling,
+    # worker assignment, and ServiceM8 booking all live per-day on JobDay.
+    days: Mapped[list["JobDay"]] = relationship(
+        back_populates="job", cascade="all, delete-orphan", order_by="JobDay.day"
     )
 
 
-class JobAssignment(Base):
-    __tablename__ = "job_assignments"
-    __table_args__ = (UniqueConstraint("job_id", "worker_id"),)
+class JobDay(Base):
+    __tablename__ = "job_days"
+    __table_args__ = (UniqueConstraint("job_id", "day"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
+    day: Mapped[datetime.date] = mapped_column(Date)
+    start_time: Mapped[datetime.time | None] = mapped_column(Time, nullable=True)
+    end_time: Mapped[datetime.time | None] = mapped_column(Time, nullable=True)
+
+    servicem8_booked: Mapped[bool] = mapped_column(Boolean, default=False)
+    servicem8_activity_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    servicem8_last_synced_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+
+    job: Mapped["Job"] = relationship(back_populates="days")
+    assignments: Mapped[list["JobDayAssignment"]] = relationship(
+        back_populates="job_day", cascade="all, delete-orphan"
+    )
+
+
+class JobDayAssignment(Base):
+    __tablename__ = "job_day_assignments"
+    __table_args__ = (UniqueConstraint("job_day_id", "worker_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_day_id: Mapped[int] = mapped_column(ForeignKey("job_days.id"))
     worker_id: Mapped[int] = mapped_column(ForeignKey("workers.id"))
 
-    job: Mapped["Job"] = relationship(back_populates="assignments")
+    job_day: Mapped["JobDay"] = relationship(back_populates="assignments")
     worker: Mapped["Worker"] = relationship(back_populates="assignments")
 
 

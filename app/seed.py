@@ -11,7 +11,7 @@ import getpass
 import sys
 
 from app.database import Base, SessionLocal, engine
-from app.models import Job, JobAssignment, Status, User, Worker
+from app.models import Job, JobDay, JobDayAssignment, Status, User, Worker
 from app.security import hash_password
 
 DEFAULT_STATUSES = [
@@ -103,14 +103,14 @@ def seed_demo(db, statuses: dict[str, Status]) -> None:
             description=desc,
             queue_name="Work Bay",
             status_id=statuses[status_name].id,
-            day=day,
-            start_time=start,
-            end_time=end,
         )
         db.add(job)
         db.flush()
+        job_day = JobDay(job_id=job.id, day=day, start_time=start, end_time=end)
+        db.add(job_day)
+        db.flush()
         for wn in worker_names:
-            db.add(JobAssignment(job_id=job.id, worker_id=workers[wn].id))
+            db.add(JobDayAssignment(job_day_id=job_day.id, worker_id=workers[wn].id))
 
     db.add(
         Job(

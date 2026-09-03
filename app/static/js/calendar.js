@@ -32,15 +32,16 @@
     });
     const data = await res.json().catch(() => null);
     if (!res.ok) {
-      if (data && data.error === "worker_on_leave") alert(data.message);
+      if (data && (data.error === "worker_on_leave" || data.error === "already_scheduled")) alert(data.message);
       return null;
     }
     return data;
   }
 
-  function openJobModal(jobId) {
+  function openJobModal(jobId, jobDayId) {
     const url = new URL(window.location.href);
     url.searchParams.set("job", jobId);
+    if (jobDayId) url.searchParams.set("day", jobDayId);
     window.location.href = url.toString();
   }
 
@@ -174,9 +175,147 @@
   function dragPayload(el) {
     return JSON.stringify({
       jobId: el.dataset.jobId,
+      jobDayId: el.dataset.jobDayId ? parseInt(el.dataset.jobDayId, 10) : null,
       durationMin: parseInt(el.dataset.durationMin || DEFAULT_DURATION_MIN, 10),
     });
   }
+
+  // Right-click a scheduled job block to copy it, then right-click a lane
+  // (or a day cell in month view) on another day to paste — adds the job to
+  // that day without touching where it already is. The copied job persists
+  // in localStorage (same pattern as the sidebar queue filter) so it
+  // survives a page reload between copy and paste.
+  const COPIED_JOB_KEY = "copiedJob";
+
+  function getCopiedJob() {
+    try {
+      return JSON.parse(localStorage.getItem(COPIED_JOB_KEY) || "null");
+    } catch {
+      return null;
+    }
+  }
+
+  function updateCopiedIndicator() {
+    const el = document.getElementById("copied-job-indicator");
+    if (!el) return;
+    const copied = getCopiedJob();
+    if (copied) {
+      el.textContent = `Job #${copied.number} copied — right-click a day to paste`;
+      el.style.display = "";
+    } else {
+      el.style.display = "none";
+    }
+  }
+
+  function setCopiedJob(job) {
+    localStorage.setItem(COPIED_JOB_KEY, JSON.stringify(job));
+    updateCopiedIndicator();
+  }
+
+  function clearCopiedJob() {
+    localStorage.removeItem(COPIED_JOB_KEY);
+    updateCopiedIndicator();
+  }
+
+  const copiedJobIndicator = document.getElementById("copied-job-indicator");
+  if (copiedJobIndicator) copiedJobIndicator.addEventListener("click", clearCopiedJob);
+  updateCopiedIndicator();
+
+  let contextMenuEl = null;
+  function closeContextMenu() {
+    if (contextMenuEl) {
+      contextMenuEl.remove();
+      contextMenuEl = null;
+    }
+  }
+  document.addEventListener("click", closeContextMenu);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeContextMenu();
+  });
+
+  function showContextMenu(x, y, items) {
+    closeContextMenu();
+    const menu = document.createElement("div");
+    menu.className = "context-menu";
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+    items.forEach((item) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = item.label;
+      btn.disabled = !!item.disabled;
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeContextMenu();
+        item.onClick();
+      });
+      menu.appendChild(btn);
+    });
+    document.body.appendChild(menu);
+    contextMenuEl = menu;
+  }
+
+  async function pasteJobOnto(day, workerId) {
+    const copied = getCopiedJob();
+    if (!copied) return;
+    const result = await postSchedule(copied.id, {
+      day,
+      worker_id: workerId || undefined,
+    });
+    if (!result) return;
+    if (result.needs_worker) {
+      openJobModal(copied.id, result.job_day_id);
+    } else {
+      window.location.reload();
+    }
+  }
+
+  document.querySelectorAll(".job-block[data-job-id][data-job-number], .month-block[data-job-id][data-job-number]").forEach((block) => {
+    block.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showContextMenu(e.pageX, e.pageY, [
+        {
+          label: `Copy #${block.dataset.jobNumber}`,
+          onClick: () => setCopiedJob({ id: block.dataset.jobId, number: block.dataset.jobNumber }),
+        },
+      ]);
+    });
+  });
+
+  document.querySelectorAll(".lane-body[data-worker-id], .lane-body.empty-day").forEach((laneBody) => {
+    laneBody.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      const copied = getCopiedJob();
+      showContextMenu(e.pageX, e.pageY, [
+        {
+          label: copied ? `Paste #${copied.number} here` : "Nothing copied",
+          disabled: !copied,
+          onClick: () => {
+            if (laneBody.dataset.onLeave === "true") {
+              alert("This worker is on leave that day and can't be assigned.");
+              return;
+            }
+            pasteJobOnto(laneBody.dataset.day, laneBody.dataset.workerId ? parseInt(laneBody.dataset.workerId, 10) : null);
+          },
+        },
+      ]);
+    });
+  });
+
+  document.querySelectorAll(".month-cell[data-day]").forEach((cell) => {
+    cell.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      const copied = getCopiedJob();
+      showContextMenu(e.pageX, e.pageY, [
+        {
+          label: copied ? `Paste #${copied.number} here` : "Nothing copied",
+          disabled: !copied,
+          onClick: () => pasteJobOnto(cell.dataset.day, null),
+        },
+      ]);
+    });
+  });
 
   // Sidebar job cards
   document.querySelectorAll(".job-card[draggable]").forEach((card) => {
@@ -218,6 +357,7 @@
       const endTotalMin = startTotalMin + data.durationMin;
 
       const result = await postSchedule(data.jobId, {
+        job_day_id: data.jobDayId || undefined,
         day: laneBody.dataset.day,
         worker_id: parseInt(laneBody.dataset.workerId, 10),
         start_time: minutesToTimeStr(startTotalMin),
@@ -239,10 +379,13 @@
     laneBody.addEventListener("drop", async (e) => {
       e.preventDefault();
       const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-      const result = await postSchedule(data.jobId, { day: laneBody.dataset.day });
+      const result = await postSchedule(data.jobId, {
+        job_day_id: data.jobDayId || undefined,
+        day: laneBody.dataset.day,
+      });
       if (!result) return;
       if (result.needs_worker) {
-        openJobModal(data.jobId);
+        openJobModal(data.jobId, result.job_day_id);
       } else {
         window.location.reload();
       }
@@ -256,10 +399,13 @@
     cell.addEventListener("drop", async (e) => {
       e.preventDefault();
       const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-      const result = await postSchedule(data.jobId, { day: cell.dataset.day });
+      const result = await postSchedule(data.jobId, {
+        job_day_id: data.jobDayId || undefined,
+        day: cell.dataset.day,
+      });
       if (!result) return;
       if (result.needs_worker) {
-        openJobModal(data.jobId);
+        openJobModal(data.jobId, result.job_day_id);
       } else {
         window.location.reload();
       }
@@ -287,6 +433,7 @@
       const delta = btn.classList.contains("dur-up") ? SNAP_MIN : -SNAP_MIN;
       const newDuration = Math.max(SNAP_MIN, endMin - startMin + delta);
       const ok = await postSchedule(btn.dataset.jobId, {
+        job_day_id: block.dataset.jobDayId ? parseInt(block.dataset.jobDayId, 10) : undefined,
         end_time: minutesToTimeStr((startMin + newDuration) % 1440),
       });
       if (ok) window.location.reload();
@@ -304,6 +451,7 @@
       const laneBody = block.closest(".lane-body");
       const startHour = parseInt(laneBody.dataset.startHour, 10);
       const jobId = block.dataset.jobId;
+      const jobDayId = block.dataset.jobDayId ? parseInt(block.dataset.jobDayId, 10) : undefined;
       const initialTop = parseInt(block.style.top, 10);
       const initialHeight = parseInt(block.style.height, 10);
       const startY = e.clientY;
@@ -322,7 +470,7 @@
         const durationMin = Math.max(SNAP_MIN, snap((finalHeight / PX_PER_HOUR) * 60));
         const startTotalMin = startHour * 60 + snap(startMinutesFromRangeStart);
         const endTotalMin = startTotalMin + durationMin;
-        const ok = await postSchedule(jobId, { end_time: minutesToTimeStr(endTotalMin) });
+        const ok = await postSchedule(jobId, { job_day_id: jobDayId, end_time: minutesToTimeStr(endTotalMin) });
         if (ok) window.location.reload();
       }
 

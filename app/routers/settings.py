@@ -12,7 +12,7 @@ from app import servicem8, sync
 from app.config import DATABASE_PATH
 from app.database import engine, get_db
 from app.deps import require_admin
-from app.models import JobAssignment, Queue, Setting, Status, User, Worker, WorkerLeave
+from app.models import JobDayAssignment, Queue, Setting, Status, User, Worker, WorkerLeave
 from app.security import hash_password
 from app.templating import templates
 
@@ -258,7 +258,7 @@ def worker_toggle_active(worker_id: int, user: User = Depends(require_admin), db
 def worker_delete(worker_id: int, user: User = Depends(require_admin), db: Session = Depends(get_db)):
     w = db.get(Worker, worker_id)
     if w:
-        db.query(JobAssignment).filter(JobAssignment.worker_id == worker_id).delete()
+        db.query(JobDayAssignment).filter(JobDayAssignment.worker_id == worker_id).delete()
         db.delete(w)
         db.commit()
     return RedirectResponse("/settings/workers", status_code=303)

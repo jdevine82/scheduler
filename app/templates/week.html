@@ -48,10 +48,10 @@
   <div class="hint">Lane = who · left stripe = status · fill = worker (secondary) · click a name to filter</div>
 </div>
 
-{% if open_job %}
+{% if open_job and open_job_day %}
   {% set all_statuses = statuses %}
   {% set all_workers = workers %}
-  {% set assigned_worker_ids = open_job.assignments|map(attribute="worker_id")|list %}
+  {% set assigned_worker_ids = open_job_day.assignments|map(attribute="worker_id")|list %}
   {% set return_to = "/week?start=" ~ days[0].date.isoformat() %}
   {% include "_job_modal.html" %}
 {% endif %}

@@ -29,4 +29,4 @@ files/                         — original design spec, style guide, and mockup
 
 ## Status
 
-Feature-complete proof of concept: multi-user auth (with a public read-only calendar for logged-out visitors), month/week/day calendar with drag-and-drop, ServiceM8 sync (read + booking write-back), worker holiday/leave tracking with scheduling conflict prevention, a weekly completion report, print/export, and an in-app database backup/restore. See `files/JOB_SCHEDULER_SPEC.md` for the original build spec.
+Feature-complete proof of concept: multi-user auth (with a public read-only calendar for logged-out visitors), month/week/day calendar with drag-and-drop, multi-day jobs with per-day workers and booking (copy/paste a job onto other days), ServiceM8 sync (read + booking write-back), worker holiday/leave tracking with scheduling conflict prevention, a weekly completion report, print/export, and an in-app database backup/restore. See `files/JOB_SCHEDULER_SPEC.md` for the original build spec.

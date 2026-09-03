@@ -111,3 +111,15 @@ sudo systemctl restart job-scheduler   # if running as a service
 ```
 
 The database schema is currently managed by hand (no migration tool) — if a future update adds new columns, the release notes will say so and give the exact command to run.
+
+### Upgrading to multi-day jobs (schema change)
+
+The update that added multi-day job support changed how scheduling is stored (jobs can now span several days, each with their own workers and times), which isn't compatible with the previous database schema. If your install hasn't gone live yet, the simplest path is to recreate the database from scratch rather than migrate it:
+
+1. Stop the app: `sudo systemctl stop job-scheduler` (or Ctrl-C if running it directly).
+2. Move or delete the existing database file and any journal alongside it: `rm job_scheduler.db job_scheduler.db-journal` (or `mv` them aside if you'd rather keep a copy).
+3. `git pull` and reinstall dependencies as above.
+4. Recreate the database and first admin login: `.venv/bin/python -m app.seed`.
+5. Restart the app: `sudo systemctl start job-scheduler`.
+
+If your install already has real data you need to keep, don't run this — get in touch before upgrading so the data can be migrated instead of recreated.

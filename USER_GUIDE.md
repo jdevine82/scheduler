@@ -46,6 +46,17 @@ In the modal you can change:
 
 A breadcrumb at the bottom shows who last edited the job and when.
 
+## Multi-day jobs
+
+Some jobs run over more than one day, sometimes with a different crew each day. Right-click a scheduled job block and choose **Copy**, then right-click a lane on another day (or a day cell in month view) and choose **Paste job #___ here** — that adds the job to that day too, with its own time and worker(s), without touching where it's already scheduled. A small "Job #1234 copied" chip stays in the top bar as a reminder — click it to cancel, or paste onto as many further days as you like before copying something else.
+
+Once a job has more than one day, every block for it shows a **day badge** (e.g. "2/3") so you can see at a glance which day you're looking at. Double-click any of its days to open the modal scoped to just that day — you can change its workers, time, or status from there (status applies to the whole job; everything else is per-day).
+
+- **Remove this day** unschedules just that one day — the job and its other days are untouched. If it's the job's only remaining day, this puts it back in the sidebar as unscheduled.
+- **Delete job** removes the whole job, including every day it's scheduled on.
+
+Multi-day jobs are entirely local to this app — pasting a job onto another day doesn't create a second ServiceM8 job, it's still the same one underneath.
+
 ## Worker holidays
 
 Admins can record one or more holiday/leave periods per worker under **Settings → Holidays** (worker, start date, finish date, and an optional reason). Once a period is on file:
@@ -58,21 +69,21 @@ Leave is entirely local to this app — it isn't imported from or written back t
 
 ## Booking into ServiceM8
 
-Once a job has a day, start time, and finish time, the modal's **"Book in ServiceM8"** button becomes active. Clicking it:
+Once a day has a start time and finish time, the modal's **"Book in ServiceM8"** button becomes active for that day. Clicking it:
 
-1. Creates (or updates) a scheduled activity in ServiceM8 for that job, with the exact date/time shown on the calendar.
-2. Forces the job's status to **Booked with Customer** — this always happens on booking, no exceptions, since that status means "the customer has this date locked in."
-3. **Locks the job on the calendar**: it can no longer be dragged around (shown with a 🔒 next to its job number). Double-click still opens the modal to make a deliberate change — that's the only way to move a booked job.
+1. Creates (or updates) a scheduled activity in ServiceM8 for that day, with its exact date/time.
+2. Forces the job's overall status to **Booked with Customer** — this always happens on booking, no exceptions, since that status means "the customer has this date locked in." For a multi-day job, booking any one day sets this shared status.
+3. **Locks that day on the calendar**: it can no longer be dragged around (shown with a 🔒 next to the job number). Other days of the same job, if any, are unaffected and stay independently draggable until booked themselves. Double-click a locked day to make a deliberate change — that's the only way to move it.
 
 ### Re-syncing a booking
 
-If you've changed a booked job's time in the modal and saved, or you just want to double-check ServiceM8 still has it, click **"Re-sync booking."** This checks ServiceM8's actual current state and reconciles automatically:
+If you've changed a booked day's time in the modal and saved, or you just want to double-check ServiceM8 still has it, click **"Re-sync booking."** This checks ServiceM8's actual current state for that day and reconciles automatically:
 
 - **Booking still there, but a different time** → the calendar updates to match ServiceM8, and stays locked.
-- **Booking no longer exists in ServiceM8** (someone removed or changed it there) → the job is unlocked and its status is set to **Cancelled**.
+- **Booking no longer exists in ServiceM8** (someone removed or changed it there) → that day is unlocked and the job's status is set to **Cancelled**.
 - **Matches already** → nothing changes except the "last synced" timestamp.
 
-The top-bar **"Sync now"** button (see below) runs this same check across *every* currently-booked job in one go, not just one at a time.
+The top-bar **"Sync now"** button (see below) runs this same check across *every* currently-booked day in one go, not just one at a time.
 
 ## The sidebar
 

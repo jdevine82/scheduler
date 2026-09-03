@@ -31,14 +31,15 @@
           {% if day_leave_workers %}
           <div class="leave-badge" title="On leave: {{ day_leave_workers|map(attribute='name')|join(', ') }}">&#127796; {{ day_leave_workers|map(attribute='name')|map('first')|join(', ') }}</div>
           {% endif %}
-          {% for j in jobs_by_day.get(d, [])[:4] %}
-          {% set is_locked = j.status.name == 'Booked with Customer' %}
-          {% set is_leave_conflict = (j.assignments | selectattr('worker_id', 'in', day_leave_ids) | list) | length > 0 %}
-          <div class="month-block {% if is_locked %}locked{% endif %} {% if is_leave_conflict %}leave-conflict{% endif %}" draggable="{{ 'false' if (is_locked or not user) else 'true' }}" data-job-id="{{ j.id }}" data-open-url="/month?year={{ d.year }}&month={{ d.month }}&job={{ j.id }}"
-               data-worker-ids="{{ j.assignments|map(attribute='worker_id')|join(',') }}" style="border-left-color:{{ j.status.color_hex }};"
-               title="{{ j.customer_name }}{% if is_leave_conflict %} — an assigned worker is on leave this day{% elif is_locked %} — booked with customer, double-click to edit{% endif %}">
-            {% if j.assignments %}<div class="swatch" style="background:{{ j.assignments[0].worker.color_hex }};"></div>{{ j.assignments[0].worker.name[0] }} ·{% endif %}
-            <span class="mono">#{{ j.job_number }}</span> {{ j.customer_name }}{% if is_leave_conflict %} &#9888;{% endif %}{% if is_locked %} &#128274;{% endif %}
+          {% for jd in jobs_by_day.get(d, [])[:4] %}
+          {% set is_locked = jd.servicem8_booked %}
+          {% set is_leave_conflict = (jd.assignments | selectattr('worker_id', 'in', day_leave_ids) | list) | length > 0 %}
+          {% set day_index, day_count = day_badge_by_job_day_id[jd.id] %}
+          <div class="month-block {% if is_locked %}locked{% endif %} {% if is_leave_conflict %}leave-conflict{% endif %}" draggable="{{ 'false' if (is_locked or not user) else 'true' }}" data-job-id="{{ jd.job.id }}" data-job-day-id="{{ jd.id }}" data-job-number="{{ jd.job.job_number }}" data-open-url="/month?year={{ d.year }}&month={{ d.month }}&job={{ jd.job.id }}&day={{ jd.id }}"
+               data-worker-ids="{{ jd.assignments|map(attribute='worker_id')|join(',') }}" style="border-left-color:{{ jd.job.status.color_hex }};"
+               title="{{ jd.job.customer_name }}{% if is_leave_conflict %} — an assigned worker is on leave this day{% elif is_locked %} — booked with customer, double-click to edit{% endif %}">
+            {% if jd.assignments %}<div class="swatch" style="background:{{ jd.assignments[0].worker.color_hex }};"></div>{{ jd.assignments[0].worker.name[0] }} ·{% endif %}
+            <span class="mono">#{{ jd.job.job_number }}</span> {{ jd.job.customer_name }}{% if day_count > 1 %} <span class="day-badge">{{ day_index }}/{{ day_count }}</span>{% endif %}{% if is_leave_conflict %} &#9888;{% endif %}{% if is_locked %} &#128274;{% endif %}
           </div>
           {% endfor %}
           {% if jobs_by_day.get(d, [])|length > 4 %}
@@ -58,10 +59,10 @@
   <div class="hint">Click a name to filter</div>
 </div>
 
-{% if open_job %}
+{% if open_job and open_job_day %}
   {% set all_statuses = statuses %}
   {% set all_workers = workers %}
-  {% set assigned_worker_ids = open_job.assignments|map(attribute="worker_id")|list %}
+  {% set assigned_worker_ids = open_job_day.assignments|map(attribute="worker_id")|list %}
   {% set return_to = "/month?year=" ~ current_year ~ "&month=" ~ current_month %}
   {% include "_job_modal.html" %}
 {% endif %}

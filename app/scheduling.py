@@ -3,7 +3,7 @@ import datetime
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import WEEK_VIEW_END_HOUR, WEEK_VIEW_START_HOUR
-from app.models import Job, JobAssignment, Worker, WorkerLeave
+from app.models import Job, JobDay, JobDayAssignment, Worker, WorkerLeave
 
 PX_PER_HOUR = 56
 SHORT_BLOCK_THRESHOLD_PX = 45
@@ -104,6 +104,28 @@ def workers_needing_leave_check(
     return new_worker_ids if day_changed else (new_worker_ids - old_worker_ids)
 
 
+def job_day_positions(db: Session, job_ids: set[int]) -> dict[int, list[datetime.date]]:
+    """For each job id, the sorted list of all its scheduled days — used to
+    compute a "day X of N" position for any specific day of that job. One
+    query for a whole batch of jobs rather than one query per occurrence."""
+    if not job_ids:
+        return {}
+    rows = db.query(JobDay.job_id, JobDay.day).filter(JobDay.job_id.in_(job_ids)).all()
+    result: dict[int, list[datetime.date]] = {}
+    for job_id, d in rows:
+        result.setdefault(job_id, []).append(d)
+    for days in result.values():
+        days.sort()
+    return result
+
+
+def day_position(positions: dict[int, list[datetime.date]], job_id: int, day: datetime.date) -> tuple[int, int]:
+    """1-based index of `day` among `job_id`'s days, and the total count —
+    e.g. (2, 3) means this is day 2 of a 3-day job."""
+    days = positions.get(job_id, [day])
+    return (days.index(day) + 1 if day in days else 1), len(days)
+
+
 def build_day_lanes(
     db: Session,
     day: datetime.date,
@@ -115,7 +137,8 @@ def build_day_lanes(
     """Return (lanes, lane_body_height_px) for a single day.
 
     Each lane: {"worker": Worker, "blocks": [block, ...], "on_leave": bool}
-    Each block: {"job", "top", "height", "short", "linked", "other_workers"}
+    Each block: {"job", "job_day_id", "day_index", "day_count", "top",
+    "height", "short", "linked", "other_workers"}
     Every active worker gets a lane every day, regardless of whether they
     have a job that day — this keeps a drop target available for any
     worker, and keeps on-leave workers visible (greyed out) even with an
@@ -130,26 +153,28 @@ def build_day_lanes(
     """
     lane_body_height = (end_hour - start_hour) * PX_PER_HOUR
 
-    # Eager-load assignments -> worker and status in the same round trip —
-    # without this, each job.assignments / assignment.worker / job.status
-    # access below would fire its own query (N+1), and this function runs
-    # up to 7x per week-view request (once per day).
-    jobs = (
-        db.query(Job)
+    # Eager-load assignments -> worker, job, and job.status in the same
+    # round trip — without this, each access below would fire its own query
+    # (N+1), and this function runs up to 7x per week-view request (once
+    # per day).
+    job_days = (
+        db.query(JobDay)
         .options(
-            selectinload(Job.assignments).selectinload(JobAssignment.worker),
-            selectinload(Job.status),
+            selectinload(JobDay.assignments).selectinload(JobDayAssignment.worker),
+            selectinload(JobDay.job).selectinload(Job.status),
         )
-        .filter(Job.day == day)
-        .filter(Job.start_time.isnot(None))
-        .filter(Job.end_time.isnot(None))
+        .filter(JobDay.day == day)
+        .filter(JobDay.start_time.isnot(None))
+        .filter(JobDay.end_time.isnot(None))
         .all()
     )
 
-    jobs_by_worker_id: dict[int, list[Job]] = {}
-    for job in jobs:
-        for a in job.assignments:
-            jobs_by_worker_id.setdefault(a.worker_id, []).append(job)
+    job_days_by_worker_id: dict[int, list[JobDay]] = {}
+    for jd in job_days:
+        for a in jd.assignments:
+            job_days_by_worker_id.setdefault(a.worker_id, []).append(jd)
+
+    positions = job_day_positions(db, {jd.job_id for jd in job_days})
 
     if leave_ids is None:
         leave_ids = leave_worker_ids_for_day(db, day)
@@ -159,26 +184,33 @@ def build_day_lanes(
     lanes = []
     for worker in active_workers:
         blocks = []
-        for job in jobs_by_worker_id.get(worker.id, []):
-            start_min = _time_to_minutes(job.start_time)
-            end_min = _time_to_minutes(job.end_time)
+        for jd in job_days_by_worker_id.get(worker.id, []):
+            start_min = _time_to_minutes(jd.start_time)
+            end_min = _time_to_minutes(jd.end_time)
             range_start_min = start_hour * 60
             top = round((start_min - range_start_min) / 60 * PX_PER_HOUR)
             height = max(round((end_min - start_min) / 60 * PX_PER_HOUR), 18)
             top = max(top, 0)
             height = min(height, lane_body_height - top)
 
-            other_workers = [a.worker.name for a in job.assignments if a.worker_id != worker.id]
+            other_workers = [a.worker.name for a in jd.assignments if a.worker_id != worker.id]
+            day_index, day_count = day_position(positions, jd.job_id, jd.day)
 
             blocks.append(
                 {
-                    "job": job,
+                    "job": jd.job,
+                    "job_day_id": jd.id,
+                    "day_index": day_index,
+                    "day_count": day_count,
+                    "start_time": jd.start_time,
+                    "end_time": jd.end_time,
+                    "booked": jd.servicem8_booked,
                     "top": top,
                     "height": height,
                     "short": height < SHORT_BLOCK_THRESHOLD_PX,
-                    "linked": len(job.assignments) > 1,
+                    "linked": len(jd.assignments) > 1,
                     "other_workers": other_workers,
-                    "time_label": f"{_format_time(job.start_time)}–{_format_time(job.end_time)}",
+                    "time_label": f"{_format_time(jd.start_time)}–{_format_time(jd.end_time)}",
                     "duration_min": end_min - start_min,
                 }
             )

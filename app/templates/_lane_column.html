@@ -15,14 +15,14 @@
         <div class="lane-away-label">On leave</div>
         {% endif %}
         {% for b in lane.blocks %}
-        {% set is_locked = b.job.status.name == 'Booked with Customer' %}
+        {% set is_locked = b.booked %}
         <div class="job-block {% if b.linked %}linked{% endif %} {% if b.job.status.name == 'Cancelled' %}cancelled{% endif %} {% if is_locked %}locked{% endif %} {% if lane.on_leave %}leave-conflict{% endif %}"
-             draggable="{{ 'false' if (is_locked or not user) else 'true' }}" data-job-id="{{ b.job.id }}" data-duration-min="{{ b.duration_min }}"
-             data-start-time="{{ b.job.start_time.strftime('%H:%M') }}" data-end-time="{{ b.job.end_time.strftime('%H:%M') }}"
-             data-open-url="{{ col_open_url_base }}&job={{ b.job.id }}"
+             draggable="{{ 'false' if (is_locked or not user) else 'true' }}" data-job-id="{{ b.job.id }}" data-job-day-id="{{ b.job_day_id }}" data-job-number="{{ b.job.job_number }}" data-duration-min="{{ b.duration_min }}"
+             data-start-time="{{ b.start_time.strftime('%H:%M') }}" data-end-time="{{ b.end_time.strftime('%H:%M') }}"
+             data-open-url="{{ col_open_url_base }}&job={{ b.job.id }}&day={{ b.job_day_id }}"
              title="{% if lane.on_leave %}{{ lane.worker.name }} is on leave this day — resolve this clash{% elif is_locked %}Booked with customer — double-click to edit, then re-sync the booking{% endif %}"
              style="top:{{ b.top }}px; height:{{ b.height }}px; background:{{ lane.worker.color_hex }}22; border-left-color:{{ b.job.status.color_hex }};">
-          <div class="num mono">#{{ b.job.job_number }}{% if lane.on_leave %} &#9888;{% endif %}{% if is_locked %} &#128274;{% endif %}</div>
+          <div class="num mono">#{{ b.job.job_number }}{% if b.day_count > 1 %} <span class="day-badge">{{ b.day_index }}/{{ b.day_count }}</span>{% endif %}{% if lane.on_leave %} &#9888;{% endif %}{% if is_locked %} &#128274;{% endif %}</div>
           <div class="cust">{{ b.job.customer_name }}</div>
           <div class="time mono">{{ b.time_label }}{% if b.other_workers %} · w/ {{ b.other_workers|join(", ") }}{% endif %}</div>
           {% if b.short %}
