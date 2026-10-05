@@ -100,13 +100,16 @@
         <div style="font-size:10.5px; color:var(--text-muted);">For "Whole week," any date in that week works.</div>
       </div>
       <div class="field-group">
-        <div class="field-label">Worker</div>
-        <select class="select-input" id="print-dialog-worker">
-          <option value="">All workers</option>
+        <div class="field-label">Workers</div>
+        <div class="worker-chips" id="print-dialog-workers">
           {% for w in workers %}
-          <option value="{{ w.id }}">{{ w.name }}</option>
+          <label class="chip-tag" style="cursor:pointer;">
+            <input type="checkbox" value="{{ w.id }}" style="width:auto; margin:0;">
+            <span class="swatch" style="background:{{ w.color_hex }};"></span>{{ w.name }}
+          </label>
           {% endfor %}
-        </select>
+        </div>
+        <div style="font-size:10.5px; color:var(--text-muted);">None (or all) checked prints everyone.</div>
       </div>
     </div>
     <div class="modal-foot">
@@ -122,5 +125,6 @@
 
 {% block body %}{% endblock %}
 
+<script src="/static/js/aus-date.js"></script>
 </body>
 </html>

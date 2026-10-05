@@ -54,13 +54,20 @@
     const printDialogCancel = document.getElementById("print-dialog-cancel");
     const printDialogSubmit = document.getElementById("print-dialog-submit");
     const printDialogDate = document.getElementById("print-dialog-date");
-    const printDialogWorker = document.getElementById("print-dialog-worker");
+    const printDialogWorkerChecks = () =>
+      Array.from(document.querySelectorAll('#print-dialog-workers input[type="checkbox"]'));
 
     const hideDialog = () => {
       printDialogOverlay.style.display = "none";
     };
 
     printDialogOpen.addEventListener("click", () => {
+      // Default the dialog's worker checkboxes to whatever's currently
+      // filtered via the legend, so printing follows the on-screen view.
+      const activeIds = getSelectedWorkerIds();
+      printDialogWorkerChecks().forEach((cb) => {
+        cb.checked = activeIds.has(cb.value);
+      });
       printDialogOverlay.style.display = "flex";
     });
     printDialogClose.addEventListener("click", hideDialog);
@@ -73,11 +80,14 @@
       const scope = document.querySelector('input[name="print-scope"]:checked').value;
       const date = printDialogDate.value;
       if (!date) return;
-      const worker = printDialogWorker.value;
+      const checks = printDialogWorkerChecks();
+      const checkedIds = checks.filter((cb) => cb.checked).map((cb) => cb.value);
       const path = scope === "week" ? "/print/week" : "/print/day";
       const dateParam = scope === "week" ? "start" : "date";
       let url = `${path}?${dateParam}=${date}`;
-      if (worker) url += `&worker=${worker}`;
+      // Nothing checked (or everyone checked) both mean "all workers" — only
+      // send the filter when it's an actual subset, to keep the URL clean.
+      if (checkedIds.length && checkedIds.length < checks.length) url += `&workers=${checkedIds.join(",")}`;
       window.open(url, "_blank");
       hideDialog();
     });
@@ -152,23 +162,51 @@
     applySidebarFilters();
   }
 
-  // Legend: click a worker's name to show only their jobs (week: full lanes,
-  // month: matching blocks). Click the active name again to go back to everyone.
+  // Legend: click worker names to multi-select which ones are visible (week:
+  // full lanes, month: matching blocks, day: lanes). An empty selection means
+  // everyone is shown. The selection is remembered across reloads (same
+  // pattern as the sidebar queue filter) and the print dialog picks it up so
+  // a print follows whatever's currently filtered on screen.
+  const WORKER_FILTER_KEY = "visibleWorkerIds";
+
+  function getSelectedWorkerIds() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(WORKER_FILTER_KEY) || "[]");
+      return new Set(Array.isArray(raw) ? raw.map(String) : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  function setSelectedWorkerIds(ids) {
+    localStorage.setItem(WORKER_FILTER_KEY, JSON.stringify(Array.from(ids)));
+  }
+
+  function applyWorkerFilter(selected) {
+    document.querySelectorAll(".legend-worker").forEach((b) => {
+      b.classList.toggle("active", selected.size > 0 && selected.has(b.dataset.workerId));
+    });
+
+    document.querySelectorAll(".lane[data-worker-id]").forEach((lane) => {
+      lane.classList.toggle("worker-hidden", selected.size > 0 && !selected.has(lane.dataset.workerId));
+    });
+
+    document.querySelectorAll(".month-block[data-worker-ids]").forEach((block) => {
+      const ids = block.dataset.workerIds.split(",").filter(Boolean);
+      block.classList.toggle("worker-hidden", selected.size > 0 && !ids.some((id) => selected.has(id)));
+    });
+  }
+
+  let selectedWorkerIds = getSelectedWorkerIds();
+  if (document.querySelector(".legend-worker")) applyWorkerFilter(selectedWorkerIds);
+
   document.querySelectorAll(".legend-worker").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const alreadyActive = btn.classList.contains("active");
-      document.querySelectorAll(".legend-worker").forEach((b) => b.classList.remove("active"));
-      const selectedId = alreadyActive ? null : btn.dataset.workerId;
-      if (selectedId) btn.classList.add("active");
-
-      document.querySelectorAll(".lane[data-worker-id]").forEach((lane) => {
-        lane.classList.toggle("worker-hidden", selectedId !== null && lane.dataset.workerId !== selectedId);
-      });
-
-      document.querySelectorAll(".month-block[data-worker-ids]").forEach((block) => {
-        const ids = block.dataset.workerIds.split(",").filter(Boolean);
-        block.classList.toggle("worker-hidden", selectedId !== null && !ids.includes(selectedId));
-      });
+      const id = btn.dataset.workerId;
+      if (selectedWorkerIds.has(id)) selectedWorkerIds.delete(id);
+      else selectedWorkerIds.add(id);
+      setSelectedWorkerIds(selectedWorkerIds);
+      applyWorkerFilter(selectedWorkerIds);
     });
   });
 

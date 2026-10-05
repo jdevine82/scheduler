@@ -11,7 +11,7 @@ from app.config import WEEK_VIEW_END_HOUR, WEEK_VIEW_START_HOUR
 from app.database import get_db
 from app.deps import get_current_user, get_current_user_optional
 from app.models import Job, JobDay, JobDayAssignment, Queue, Status, User, Worker, WorkerLeave
-from app.routers.settings import get_setting
+from app.routers.settings import get_setting, get_visible_weekdays
 from app.scheduling import (
     build_day_lanes,
     day_position,
@@ -101,7 +101,8 @@ def week_view(
     else:
         anchor = datetime.date.today()
     monday = week_start(anchor)
-    days = [monday + datetime.timedelta(days=i) for i in range(7)]
+    visible_weekdays = get_visible_weekdays(db)
+    days = [monday + datetime.timedelta(days=i) for i in range(7) if i in visible_weekdays]
 
     workers = db.query(Worker).filter(Worker.active.is_(True)).order_by(Worker.id).all()
     leave_by_day = leave_worker_ids_by_day(db, days)
@@ -177,22 +178,29 @@ def day_view(
     return templates.TemplateResponse(request, "day.html", ctx)
 
 
+def _parse_worker_ids(workers: str | None) -> list[int]:
+    if not workers:
+        return []
+    return [int(w) for w in workers.split(",") if w.strip()]
+
+
 @router.get("/print/day")
 def print_day(
     request: Request,
     date: str,
-    worker: int | None = None,
+    workers: str | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Print/export view for a single day (spec §6.7) — no sidebar/nav chrome,
     just the day's worker columns, suitable for printing or browser print-to-PDF.
-    Optionally filtered down to a single worker."""
+    Optionally filtered down to one or more workers."""
     day = datetime.date.fromisoformat(date)
-    workers = db.query(Worker).filter(Worker.active.is_(True)).order_by(Worker.id).all()
-    lanes, lane_height = build_day_lanes(db, day, active_workers=workers)
-    if worker:
-        lanes = [lane for lane in lanes if lane["worker"].id == worker]
+    worker_ids = _parse_worker_ids(workers)
+    active_workers = db.query(Worker).filter(Worker.active.is_(True)).order_by(Worker.id).all()
+    lanes, lane_height = build_day_lanes(db, day, active_workers=active_workers)
+    if worker_ids:
+        lanes = [lane for lane in lanes if lane["worker"].id in worker_ids]
     statuses = db.query(Status).order_by(Status.sort_order).all()
 
     job_ids = {b["job"].id for lane in lanes for b in lane["blocks"]}
@@ -215,17 +223,24 @@ def print_day(
 def print_week(
     request: Request,
     start: str,
-    worker: int | None = None,
+    workers: str | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Print/export view for a whole week — one column per day, optionally
-    filtered to a single worker's jobs across the week."""
+    """Print/export view for a whole week — one column per visible day (per
+    Settings → Display), optionally filtered to one or more workers' jobs
+    across the week."""
     anchor = datetime.date.fromisoformat(start)
     monday = week_start(anchor)
-    days = [monday + datetime.timedelta(days=i) for i in range(7)]
+    visible_weekdays = get_visible_weekdays(db)
+    days = [monday + datetime.timedelta(days=i) for i in range(7) if i in visible_weekdays]
 
-    worker_obj = db.get(Worker, worker) if worker else None
+    worker_ids = _parse_worker_ids(workers)
+    worker_filter_names = (
+        [w.name for w in db.query(Worker).filter(Worker.id.in_(worker_ids)).order_by(Worker.id).all()]
+        if worker_ids
+        else []
+    )
     active_workers = db.query(Worker).filter(Worker.active.is_(True)).order_by(Worker.id).all()
     leave_by_day = leave_worker_ids_by_day(db, days)
 
@@ -233,8 +248,8 @@ def print_week(
     job_ids: set[int] = set()
     for d in days:
         lanes, lane_height = build_day_lanes(db, d, active_workers=active_workers, leave_ids=leave_by_day[d])
-        if worker:
-            lanes = [lane for lane in lanes if lane["worker"].id == worker]
+        if worker_ids:
+            lanes = [lane for lane in lanes if lane["worker"].id in worker_ids]
         for lane in lanes:
             for b in lane["blocks"]:
                 job_ids.add(b["job"].id)
@@ -249,7 +264,7 @@ def print_week(
         "hours": hour_labels(),
         "statuses": statuses,
         "week_label": week_label(monday),
-        "worker_filter": worker_obj,
+        "worker_filter_names": worker_filter_names,
         "job_count": len(job_ids),
     }
     return templates.TemplateResponse(request, "print_week.html", ctx)

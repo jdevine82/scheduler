@@ -84,7 +84,7 @@
     </div>
     <div class="date">
       <div class="day">{{ week_label }}</div>
-      <div class="sub">{{ job_count }} job{{ "s" if job_count != 1 else "" }} scheduled · {{ worker_filter.name if worker_filter else "All workers" }}</div>
+      <div class="sub">{{ job_count }} job{{ "s" if job_count != 1 else "" }} scheduled · {{ worker_filter_names|join(", ") if worker_filter_names else "All workers" }}</div>
     </div>
   </div>
 

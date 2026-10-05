@@ -37,6 +37,10 @@ DEFAULT_STATUSES = [
 ]
 
 
+WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+DEFAULT_VISIBLE_WEEKDAYS = "0,1,2,3,4,5,6"
+
+
 def get_setting(db: Session, key: str, default: str = "") -> str:
     row = db.get(Setting, key)
     return row.value if row else default
@@ -49,6 +53,19 @@ def set_setting(db: Session, key: str, value: str) -> None:
         db.add(row)
     else:
         row.value = value
+
+
+def get_visible_weekdays(db: Session) -> list[int]:
+    """Weekday indices (0=Monday..6=Sunday) shown in the week view and its
+    print sheet, per Settings → Display. Falls back to all seven if unset,
+    empty, or corrupted."""
+    raw = get_setting(db, "week_visible_days", DEFAULT_VISIBLE_WEEKDAYS)
+    try:
+        days = sorted({int(x) for x in raw.split(",") if x.strip() != ""})
+    except ValueError:
+        days = []
+    valid = [d for d in days if 0 <= d <= 6]
+    return valid or list(range(7))
 
 
 def _base_ctx(request: Request, user: User, active_tab: str) -> dict:
@@ -305,6 +322,34 @@ def holiday_delete(leave_id: int, user: User = Depends(require_admin), db: Sessi
         db.delete(h)
         db.commit()
     return RedirectResponse("/settings/holidays", status_code=303)
+
+
+@router.get("/display")
+def display_get(
+    request: Request,
+    error: str | None = None,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    ctx = _base_ctx(request, user, "display")
+    ctx["weekday_names"] = WEEKDAY_NAMES
+    ctx["visible_weekdays"] = get_visible_weekdays(db)
+    ctx["error"] = error
+    return templates.TemplateResponse(request, "settings/display.html", ctx)
+
+
+@router.post("/display")
+def display_post(
+    days: list[int] = Form([]),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    selected = sorted({d for d in days if 0 <= d <= 6})
+    if not selected:
+        return RedirectResponse("/settings/display?error=empty", status_code=303)
+    set_setting(db, "week_visible_days", ",".join(str(d) for d in selected))
+    db.commit()
+    return RedirectResponse("/settings/display", status_code=303)
 
 
 @router.get("/users")

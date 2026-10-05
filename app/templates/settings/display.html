@@ -1,0 +1,21 @@
+{% extends "settings/_base.html" %}
+{% block settings_content %}
+{% if error == "empty" %}
+<div class="flash error">Pick at least one day — the week view needs something to show.</div>
+{% endif %}
+<div class="card">
+  <h2>Week view days</h2>
+  <div class="subtitle" style="margin-bottom:10px;">Choose which days of the week appear in the week view — the print sheet follows the same choice.</div>
+  <form method="post" action="/settings/display">
+    <div class="worker-chips" style="margin-bottom:14px;">
+      {% for name in weekday_names %}
+      <label class="chip-tag" style="cursor:pointer;">
+        <input type="checkbox" name="days" value="{{ loop.index0 }}" style="width:auto; margin:0;" {% if loop.index0 in visible_weekdays %}checked{% endif %}>
+        {{ name }}
+      </label>
+      {% endfor %}
+    </div>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </form>
+</div>
+{% endblock %}

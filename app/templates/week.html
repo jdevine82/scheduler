@@ -45,7 +45,7 @@
   {% for w in workers %}
   <button class="item legend-worker" data-worker-id="{{ w.id }}"><div class="dot" style="background:{{ w.color_hex }};"></div>{{ w.name }}</button>
   {% endfor %}
-  <div class="hint">Lane = who · left stripe = status · fill = worker (secondary) · click a name to filter</div>
+  <div class="hint">Lane = who · left stripe = status · fill = worker (secondary) · click names to filter (multi-select)</div>
 </div>
 
 {% if open_job and open_job_day %}
