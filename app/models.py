@@ -47,6 +47,10 @@ class Worker(Base):
     # stays local per spec §3, this doesn't drive it.
     servicem8_staff_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
+    # This worker's own ServiceM8 queue ("folder"). Scheduling a job for them
+    # moves it into this queue in ServiceM8; unset means leave it where it is.
+    servicem8_queue_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     assignments: Mapped[list["JobDayAssignment"]] = relationship(back_populates="worker")
     leave_periods: Mapped[list["WorkerLeave"]] = relationship(
         back_populates="worker", cascade="all, delete-orphan"
@@ -107,6 +111,10 @@ class Job(Base):
 
     # Job moved out of a watched ServiceM8 queue since import — surfaced, not deleted.
     flagged_missing_from_queue: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # "queue|staff|expiry" last written to ServiceM8 by queue routing, so a
+    # drag or resize that doesn't change the target doesn't re-send it.
+    servicem8_queue_pushed: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     last_modified_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     last_modified_by: Mapped["User | None"] = relationship()

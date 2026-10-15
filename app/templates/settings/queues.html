@@ -33,6 +33,24 @@
   {% endif %}
 </div>
 <div class="card">
+  <h2>Ready to schedule queue</h2>
+  <form method="post" action="/settings/queues/ready" class="form-row">
+    <div class="field-group">
+      <label for="ready_queue_uuid">Queue</label>
+      <select class="plain" id="ready_queue_uuid" name="ready_queue_uuid" style="width:220px;">
+        <option value="">— none —</option>
+        {% for q in queues %}
+        <option value="{{ q.servicem8_queue_uuid }}" {% if q.servicem8_queue_uuid == ready_queue_uuid %}selected{% endif %}>{{ q.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </form>
+  <div class="subtitle" style="margin-top:10px; margin-bottom:0;">
+    When a job is taken off the calendar completely, it's moved back into this queue in ServiceM8. Scheduled jobs go to their worker's queue (set under <a href="/settings/workers">Workers</a>).
+  </div>
+</div>
+<div class="card">
   <h2>Completion queue</h2>
   <form method="post" action="/settings/queues/completion" class="form-row">
     <div class="field-group">

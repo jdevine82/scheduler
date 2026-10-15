@@ -10,7 +10,7 @@ import datetime
 import getpass
 import sys
 
-from app.database import Base, SessionLocal, engine
+from app.database import Base, SessionLocal, add_missing_columns, engine
 from app.models import Job, JobDay, JobDayAssignment, Status, User, Worker
 from app.security import hash_password
 
@@ -132,6 +132,7 @@ def main():
     args = parser.parse_args()
 
     Base.metadata.create_all(bind=engine)
+    add_missing_columns()
     db = SessionLocal()
     try:
         statuses = seed_statuses(db)

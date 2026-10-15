@@ -117,3 +117,22 @@ def create_scheduled_activity(
     if resp.status_code >= 400:
         raise ServiceM8Error(f"{resp.status_code} from ServiceM8: {resp.text}")
     return resp.headers.get("x-record-uuid", activity_uuid or "")
+
+
+def set_job_queue(
+    api_key: str,
+    job_uuid: str,
+    queue_uuid: str,
+    expiry: str,
+    staff_uuid: str | None = None,
+) -> None:
+    """Move a Job into a queue. Only the queue fields are sent, so nothing
+    else on the job is touched. ServiceM8 wants a queue_expiry_date with every
+    queue_uuid — without one an API-queued job also lingers in Unscheduled.
+    Raises ServiceM8Error with ServiceM8's own message on a non-2xx response."""
+    payload = {"queue_uuid": queue_uuid, "queue_expiry_date": expiry}
+    if staff_uuid:
+        payload["queue_assigned_staff_uuid"] = staff_uuid
+    resp = httpx.post(f"{BASE_URL}/job/{job_uuid}.json", headers=_headers(api_key), json=payload, timeout=15)
+    if resp.status_code >= 400:
+        raise ServiceM8Error(f"{resp.status_code} from ServiceM8: {resp.text}")

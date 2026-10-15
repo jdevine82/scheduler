@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from app import servicem8, sync
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import Job, JobDay, JobDayAssignment, Status, User
+from app.models import Job, JobDay, JobDayAssignment, Queue, Status, User
 from app.routers.settings import get_setting
 from app.scheduling import week_start, worker_on_leave_conflict, workers_needing_leave_check
 from app.templating import strip_query_param
@@ -22,6 +22,8 @@ router = APIRouter()
 
 BOOKED_STATUS_NAME = "Booked with Customer"
 MANUAL_TASK_QUEUE_NAME = "Manual task"
+COMPLETED_STATUS_NAME = "Completed"
+READY_QUEUE_EXPIRY_DAYS = 14
 
 
 def _touch(job: Job, user: User) -> None:
@@ -40,6 +42,57 @@ def _set_assigned_workers(job_day: JobDay, worker_ids: set[int]) -> None:
     for worker_id in worker_ids:
         if worker_id not in current:
             job_day.assignments.append(JobDayAssignment(worker_id=worker_id))
+
+
+def _route_queue(db: Session, job: Job) -> None:
+    """Keep the job's ServiceM8 queue in step with the calendar: scheduled
+    goes to the queue of the first worker (lowest id, i.e. lane order) on
+    its earliest staffed day; fully unscheduled goes back to the "ready to
+    schedule" queue. Called after commit so job.days is fresh. Best effort —
+    a ServiceM8 failure is logged and retried on the job's next change, and
+    never blocks the local scheduling change."""
+    if job.is_manual or job.status.name == COMPLETED_STATUS_NAME:
+        return
+    api_key = get_setting(db, "servicem8_api_key")
+    if not api_key:
+        return
+
+    if job.days:
+        first_worker = None
+        for jd in job.days:
+            if jd.assignments:
+                first_worker = min((a.worker for a in jd.assignments), key=lambda w: w.id)
+                break
+        if first_worker is None or not first_worker.servicem8_queue_uuid:
+            return
+        queue_uuid = first_worker.servicem8_queue_uuid
+        staff_uuid = first_worker.servicem8_staff_uuid
+        # Expires the day after its last scheduled day, so ServiceM8 flags
+        # it for review if it's still sitting in the worker's queue by then.
+        expiry_day = job.days[-1].day + datetime.timedelta(days=1)
+    else:
+        queue_uuid = get_setting(db, "ready_queue_uuid")
+        if not queue_uuid:
+            return
+        staff_uuid = None
+        expiry_day = datetime.date.today() + datetime.timedelta(days=READY_QUEUE_EXPIRY_DAYS)
+
+    expiry = f"{expiry_day.isoformat()} 00:00:00"
+    signature = f"{queue_uuid}|{staff_uuid or ''}|{expiry}"
+    if signature == job.servicem8_queue_pushed:
+        return
+    try:
+        servicem8.set_job_queue(api_key, job.servicem8_uuid, queue_uuid, expiry, staff_uuid)
+    except Exception:
+        logger.exception("Couldn't move job %s to ServiceM8 queue %s", job.job_number, queue_uuid)
+        return
+
+    job.servicem8_queue_pushed = signature
+    queue = db.query(Queue).filter(Queue.servicem8_queue_uuid == queue_uuid).first()
+    if queue:
+        job.queue_name = queue.name
+    job.flagged_missing_from_queue = False
+    db.commit()
 
 
 def _clean_return_to(return_to_raw: str) -> str:
@@ -179,6 +232,7 @@ async def update_job_day(
 
     _touch(job, user)
     db.commit()
+    _route_queue(db, job)
     return RedirectResponse(return_to, status_code=303)
 
 
@@ -200,6 +254,7 @@ async def remove_job_day(
         db.delete(job_day)
         _touch(job, user)
         db.commit()
+        _route_queue(db, job)
     return RedirectResponse(return_to, status_code=303)
 
 
@@ -439,6 +494,7 @@ async def schedule_job(
 
         _touch(job, user)
         db.commit()
+        _route_queue(db, job)
         return JSONResponse(
             {"ok": True, "needs_worker": len(job_day.assignments) == 0, "job_day_id": job_day.id}
         )
@@ -483,6 +539,7 @@ async def schedule_job(
 
     _touch(job, user)
     db.commit()
+    _route_queue(db, job)
     # Tell the caller if this day still has nobody assigned — happens when a
     # brand-new job is dropped somewhere with no lane to infer a worker from
     # (e.g. an empty day). The frontend uses this to open the edit modal so a

@@ -7,7 +7,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app import sync
 from app.config import SESSION_SECRET
-from app.database import Base, SessionLocal, engine
+from app.database import Base, SessionLocal, add_missing_columns, engine
 from app.routers import auth, calendar, jobs, reports, settings
 from app.routers.settings import get_setting
 
@@ -46,4 +46,5 @@ async def _poll_loop():
 @app.on_event("startup")
 async def on_startup():
     Base.metadata.create_all(bind=engine)
+    add_missing_columns()
     asyncio.create_task(_poll_loop())

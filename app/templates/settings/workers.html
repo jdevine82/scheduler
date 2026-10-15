@@ -6,7 +6,7 @@
   <div class="flash error">{{ staff_fetch_error }}</div>
   {% endif %}
   <table class="data-table">
-    <tr><th>Name</th><th>Color</th><th>ServiceM8 staff</th><th>Active</th><th></th></tr>
+    <tr><th>Name</th><th>Color</th><th>ServiceM8 staff</th><th>Queue</th><th>Active</th><th></th></tr>
     {% for w in workers %}
     <tr>
       <td>
@@ -17,6 +17,12 @@
             <option value="">— none —</option>
             {% for s in staff_list %}
             <option value="{{ s.uuid }}" {% if s.uuid == w.servicem8_staff_uuid %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+          <select class="plain" name="servicem8_queue_uuid" style="width:150px;" title="This worker's ServiceM8 queue">
+            <option value="">— no queue —</option>
+            {% for q in queues %}
+            <option value="{{ q.servicem8_queue_uuid }}" {% if q.servicem8_queue_uuid == w.servicem8_queue_uuid %}selected{% endif %}>{{ q.name }}</option>
             {% endfor %}
           </select>
           <button class="btn btn-outline btn-sm" type="submit">Save</button>
@@ -30,6 +36,10 @@
         {% else %}
           Not linked
         {% endif %}
+      </td>
+      <td style="font-size:11px; color:var(--text-secondary);">
+        {% set wq = queues|selectattr("servicem8_queue_uuid", "equalto", w.servicem8_queue_uuid)|list %}
+        {{ wq[0].name if wq else "—" }}
       </td>
       <td>{% if w.active %}Active{% else %}Inactive{% endif %}</td>
       <td style="display:flex; gap:6px;">
@@ -45,7 +55,8 @@
     {% endfor %}
   </table>
   <div class="subtitle" style="margin-top:10px; margin-bottom:0;">
-    Linking a worker to ServiceM8 staff is optional and only used for the "Book in ServiceM8" write-back — the worker list itself always stays local.
+    Linking a worker to ServiceM8 staff is optional — it's used for the "Book in ServiceM8" write-back and to assign the worker in their queue. The worker list itself always stays local.<br>
+    When a job is scheduled, it's moved into the queue of its first worker in ServiceM8 (with more than one worker, the first in lane order). Workers with no queue set leave the job where it is.
   </div>
 </div>
 <div class="card">

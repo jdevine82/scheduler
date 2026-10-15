@@ -125,6 +125,7 @@ def queues_get(
     ctx["refreshed"] = refreshed
     ctx["synced"] = synced
     ctx["completion_queue_uuid"] = get_setting(db, "completion_queue_uuid")
+    ctx["ready_queue_uuid"] = get_setting(db, "ready_queue_uuid")
     return templates.TemplateResponse(request, "settings/queues.html", ctx)
 
 
@@ -134,6 +135,17 @@ def queue_toggle(queue_id: int, user: User = Depends(require_admin), db: Session
     if q:
         q.watched = not q.watched
         db.commit()
+    return RedirectResponse("/settings/queues", status_code=303)
+
+
+@router.post("/queues/ready")
+def set_ready_queue(
+    ready_queue_uuid: str = Form(""),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    set_setting(db, "ready_queue_uuid", ready_queue_uuid)
+    db.commit()
     return RedirectResponse("/settings/queues", status_code=303)
 
 
@@ -222,6 +234,7 @@ def status_delete(status_id: int, user: User = Depends(require_admin), db: Sessi
 def workers_get(request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
     ctx = _base_ctx(request, user, "workers")
     ctx["workers"] = db.query(Worker).order_by(Worker.id).all()
+    ctx["queues"] = db.query(Queue).order_by(Queue.name).all()
 
     api_key = get_setting(db, "servicem8_api_key")
     ctx["staff_list"] = []
@@ -250,6 +263,7 @@ def worker_update(
     name: str = Form(...),
     color_hex: str = Form(...),
     servicem8_staff_uuid: str = Form(""),
+    servicem8_queue_uuid: str = Form(""),
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -258,6 +272,7 @@ def worker_update(
         w.name = name
         w.color_hex = color_hex
         w.servicem8_staff_uuid = servicem8_staff_uuid or None
+        w.servicem8_queue_uuid = servicem8_queue_uuid or None
         db.commit()
     return RedirectResponse("/settings/workers", status_code=303)
 
