@@ -126,5 +126,6 @@
 {% block body %}{% endblock %}
 
 <script src="/static/js/aus-date.js"></script>
+{% if view in ("week", "day", "month") %}<script src="/static/js/auto-refresh.js"></script>{% endif %}
 </body>
 </html>
