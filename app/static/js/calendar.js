@@ -148,6 +148,55 @@
 
     if (sidebarSearch) sidebarSearch.addEventListener("input", applySidebarFilters);
 
+    // Scheduled-job search — the cards above only cover unscheduled jobs, so
+    // also ask the server for matches already on the calendar (any week).
+    // Clicking a hit jumps to its week and highlights the block.
+    const scheduledResults = document.getElementById("sidebar-scheduled-results");
+    const scheduledList = document.getElementById("sidebar-scheduled-list");
+    if (sidebarSearch && scheduledResults) {
+      let searchTimer = null;
+      let searchSeq = 0;
+
+      function renderScheduled(results) {
+        scheduledList.replaceChildren();
+        results.forEach((r) => {
+          const card = document.createElement("a");
+          card.className = "job-card scheduled-hit";
+          card.href = `/week?start=${r.day}&focus=${r.job_day_id}`;
+          const num = document.createElement("div");
+          num.className = "num mono";
+          num.textContent = `#${r.job_number}`;
+          const cust = document.createElement("div");
+          cust.className = "cust";
+          cust.textContent = r.customer_name;
+          const when = document.createElement("div");
+          when.className = "desc";
+          const workers = r.workers.length ? ` · ${r.workers.join(", ")}` : "";
+          when.textContent = `${r.day_label}${r.start_time ? " " + r.start_time : ""}${workers}`;
+          card.append(num, cust, when);
+          scheduledList.appendChild(card);
+        });
+        scheduledResults.style.display = results.length ? "" : "none";
+      }
+
+      sidebarSearch.addEventListener("input", () => {
+        clearTimeout(searchTimer);
+        const term = sidebarSearch.value.trim();
+        if (term.length < 2) {
+          searchSeq += 1;
+          renderScheduled([]);
+          return;
+        }
+        searchTimer = setTimeout(async () => {
+          const seq = ++searchSeq;
+          const res = await fetch(`/api/jobs/search?q=${encodeURIComponent(term)}`).catch(() => null);
+          if (!res || !res.ok || seq !== searchSeq) return;
+          const data = await res.json();
+          if (seq === searchSeq) renderScheduled(data.results);
+        }, 250);
+      });
+    }
+
     if (sidebarQueueFilter) {
       const savedQueue = localStorage.getItem("sidebarQueueFilter") || "";
       const hasOption = Array.from(sidebarQueueFilter.options).some((o) => o.value === savedQueue);
@@ -569,4 +618,24 @@
       if (durationSelect.value !== "custom") recomputeEnd();
     });
   };
+  // Jump-to from the sidebar's scheduled-job search: ?focus=<job_day_id>
+  // scrolls that block into view and flashes it. The param is stripped
+  // straight away so later reloads (drag-and-drop) don't re-flash it. If the
+  // day isn't shown on the week view (a hidden weekday), fall back to the
+  // day view for that date.
+  const params = new URLSearchParams(window.location.search);
+  const focusId = params.get("focus");
+  if (focusId) {
+    params.delete("focus");
+    const cleanQuery = params.toString();
+    history.replaceState(null, "", window.location.pathname + (cleanQuery ? `?${cleanQuery}` : ""));
+    const target = document.querySelector(`.job-block[data-job-day-id="${CSS.escape(focusId)}"]`);
+    if (target) {
+      target.scrollIntoView({ block: "center", inline: "center" });
+      target.classList.add("focus-flash");
+      setTimeout(() => target.classList.remove("focus-flash"), 4000);
+    } else if (window.location.pathname === "/week" && params.get("start")) {
+      window.location.replace(`/day?date=${params.get("start")}&focus=${encodeURIComponent(focusId)}`);
+    }
+  }
 })();

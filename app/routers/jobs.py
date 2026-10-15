@@ -5,7 +5,8 @@ from urllib.parse import quote_plus
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, selectinload
 
 from app import servicem8, sync
 from app.database import get_db
@@ -315,6 +316,46 @@ def resync_booking(
     _touch(job_day.job, user)
     db.commit()
     return RedirectResponse(f"{return_to}{separator}booked={outcome}", status_code=303)
+
+
+@router.get("/api/jobs/search")
+def search_scheduled_jobs(
+    q: str = "",
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Sidebar search over jobs already on the calendar — the sidebar's own
+    filtering only covers unscheduled cards, so a job booked on some past or
+    future week would otherwise be unfindable. Returns one hit per scheduled
+    day, newest first, so the board can jump straight to it."""
+    term = q.strip()
+    if len(term) < 2:
+        return {"results": []}
+    like = f"%{term}%"
+    job_days = (
+        db.query(JobDay)
+        .join(Job)
+        .filter(or_(Job.job_number.ilike(like), Job.customer_name.ilike(like), Job.description.ilike(like)))
+        .options(selectinload(JobDay.job), selectinload(JobDay.assignments).selectinload(JobDayAssignment.worker))
+        .order_by(JobDay.day.desc())
+        .limit(30)
+        .all()
+    )
+    return {
+        "results": [
+            {
+                "job_id": jd.job_id,
+                "job_day_id": jd.id,
+                "job_number": jd.job.job_number,
+                "customer_name": jd.job.customer_name,
+                "day": jd.day.isoformat(),
+                "day_label": jd.day.strftime("%a %d/%m/%Y"),
+                "start_time": jd.start_time.strftime("%H:%M") if jd.start_time else None,
+                "workers": [a.worker.name for a in jd.assignments],
+            }
+            for jd in job_days
+        ]
+    }
 
 
 @router.post("/api/jobs/{job_id}/schedule")

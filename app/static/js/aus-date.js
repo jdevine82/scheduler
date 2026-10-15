@@ -43,5 +43,15 @@
     native.addEventListener("keydown", (e) => {
       if (!ALLOWED_KEYS.has(e.key)) e.preventDefault();
     });
+    // The native input is invisible, and Chrome only opens its picker from
+    // the (now hidden) calendar icon — clicking the field body does nothing.
+    // Open the picker explicitly on any click instead.
+    native.addEventListener("click", () => {
+      try {
+        native.showPicker();
+      } catch (e) {
+        // Older browsers without showPicker() fall back to native behaviour.
+      }
+    });
   });
 })();
